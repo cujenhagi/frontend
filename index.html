@@ -411,13 +411,13 @@
 
                 const data = await response.json();
                 
-                if(response.ok) {
-                    alert(`✅ ID Pesanan: ${data.order_id}\n\nMengarahkan pembeli ke pembayaran...`);
+                if(response.ok && data.payment_url) {
+                    window.location.href = data.payment_url;
                 } else {
-                    alert("Gagal membuat pesanan.");
+                    alert("Gagal membuat pesanan. Silakan coba lagi.");
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
                 }
-                btn.innerHTML = originalText;
-                btn.disabled = false;
             } catch (error) {
                 alert("Gagal menghubungi server pusat.");
                 const btn = document.getElementById(`btn-${productId}`);
