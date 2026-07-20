@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sanlucid Digital E-Books</title>
+    
+    <!-- PRECONNECT UNTUK MEMPERCEPAT KONEKSI KE SERVER RUST & CDN GAMBAR -->
+    <link rel="preconnect" href="https://guleleng.onrender.com" crossorigin>
+    <link rel="preconnect" href="https://wsrv.nl" crossorigin>
+    <link rel="dns-prefetch" href="https://wsrv.nl">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- FINGERPRINT DIMUAT SECARA ASYNCHRONOUS AGAR TIDAK BLOKIR RENDER HALAMAN -->
+    <script async src="https://openfpcdn.io/fingerprintjs/v4"></script>
+
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+
+        @keyframes sweep1 { 0% { transform: translate3d(-30vw, -20vh, 0) scale(1); } 33% { transform: translate3d(60vw, 50vh, 0) scale(1.3); } 66% { transform: translate3d(-10vw, 80vh, 0) scale(0.8); } 100% { transform: translate3d(80vw, -10vh, 0) scale(1.2); } }
+        @keyframes sweep2 { 0% { transform: translate3d(80vw, 80vh, 0) scale(1.2); } 33% { transform: translate3d(-20vw, 40vh, 0) scale(0.8); } 66% { transform: translate3d(50vw, -20vh, 0) scale(1.4); } 100% { transform: translate3d(-40vw, 90vh, 0) scale(1); } }
+        @keyframes sweep3 { 0% { transform: translate3d(-20vw, 80vh, 0) scale(0.9); } 33% { transform: translate3d(70vw, 10vh, 0) scale(1.4); } 66% { transform: translate3d(10vw, 60vh, 0) scale(1); } 100% { transform: translate3d(90vw, -30vh, 0) scale(1.2); } }
+        @keyframes sweep4 { 0% { transform: translate3d(90vw, -20vh, 0) scale(1.3); } 33% { transform: translate3d(-10vw, 70vh, 0) scale(0.9); } 66% { transform: translate3d(60vw, 90vh, 0) scale(1.1); } 100% { transform: translate3d(-30vw, 10vh, 0) scale(1.4); } }
+
+        .blob-base { position: absolute; will-change: transform; animation-iteration-count: infinite; animation-direction: alternate; animation-timing-function: ease-in-out; }
+        .color-1 { background: radial-gradient(circle, rgba(219,39,119,0.7) 0%, rgba(219,39,119,0) 70%); animation-name: sweep1; animation-duration: 13s; }
+        .color-2 { background: radial-gradient(circle, rgba(6,182,212,0.7) 0%, rgba(6,182,212,0) 70%); animation-name: sweep2; animation-duration: 15s; }
+        .color-3 { background: radial-gradient(circle, rgba(124,58,237,0.7) 0%, rgba(124,58,237,0) 70%); animation-name: sweep3; animation-duration: 19s; }
+        .color-4 { background: radial-gradient(circle, rgba(16,185,129,0.7) 0%, rgba(16,185,129,0) 70%); animation-name: sweep4; animation-duration: 23s; }
+
+        .glass-panel { background: rgba(20, 25, 40, 0.4); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-card { background: rgba(25, 30, 45, 0.95); border: 1px solid rgba(255, 255, 255, 0.05); border-top: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); transform: translateZ(0); transition: transform 0.2s ease, box-shadow 0.2s ease; content-visibility: auto; }
+        .glass-card:hover { transform: translate3d(0, -4px, 0); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); background: rgba(35, 40, 55, 0.98); }
+
+        .search-fab-container { position: fixed; bottom: 1.5rem; right: 1.5rem; height: 3.5rem; width: 3.5rem; border-radius: 9999px; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 90; overflow: hidden; display: flex; align-items: center; background: rgba(20, 25, 40, 0.95); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
+        .search-fab-container.expanded { width: calc(100vw - 3rem); max-width: 24rem; }
+        .search-input-mobile { width: 100%; background: transparent; border: none; color: white; padding-left: 3.5rem; padding-right: 3rem; outline: none; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .search-fab-container.expanded .search-input-mobile { opacity: 1; pointer-events: auto; }
+        .fab-icon-box, .fab-close-btn { position: absolute; top: 0; width: 3.5rem; height: 3.5rem; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 2; }
+        .fab-icon-box { left: 0; }
+        .fab-close-btn { right: 0; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .search-fab-container.expanded .fab-close-btn { opacity: 1; pointer-events: auto; }
+        
+        .popup-scale { animation: popScale 0.3s ease-out forwards; }
+        @keyframes popScale { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body class="text-slate-200 font-sans antialiased relative min-h-screen bg-[#050b14] pb-20 md:pb-0 overflow-x-hidden">
+
+    <div class="fixed inset-0 z-[-2] bg-[#050b14] pointer-events-none">
+        <div class="blob-base color-1 w-[120vw] h-[120vw] md:w-[70vw] md:h-[70vw]"></div>
+        <div class="blob-base color-2 w-[110vw] h-[110vw] md:w-[65vw] md:h-[65vw]"></div>
+        <div class="blob-base color-3 w-[130vw] h-[130vw] md:w-[80vw] md:h-[80vw]"></div>
+        <div class="blob-base color-4 w-[115vw] h-[115vw] md:w-[75vw] md:h-[75vw]"></div>
+    </div>
+
+    <nav class="sticky top-0 z-50 glass-panel">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16 gap-4">
+                <div class="flex-shrink-0 text-xl font-bold tracking-widest text-white">SANLUCID<span class="text-cyan-400 font-black">.</span></div>
+                <div class="flex-1 max-w-xl hidden md:block">
+                    <div class="relative group">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-magnifying-glass text-white/50 group-focus-within:text-cyan-400 transition-colors"></i></div>
+                        <input type="text" id="desktopSearch" oninput="debounceSearch(this.value)" class="block w-full pl-11 pr-4 py-2 border border-white/20 rounded-full bg-white/[0.04] text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-cyan-400 focus:border-cyan-400 focus:bg-white/[0.08] sm:text-sm transition-all" placeholder="Cari judul, kategori, atau deskripsi e-book...">
+                    </div>
+                </div>
+                <div class="relative">
+                    <button id="supportBtn" onclick="toggleSupportMenu()" class="flex items-center text-xs font-bold px-4 py-1.5 rounded-full bg-white/[0.08] border border-white/20 hover:bg-white/[0.15] transition-all focus:outline-none z-50">
+                        <i class="fa-solid fa-headset text-cyan-400 mr-2"></i> <span class="text-white/90">Support</span> <i id="supportIcon" class="fa-solid fa-chevron-down text-white/50 ml-2 text-[10px] transition-transform duration-300"></i>
+                    </button>
+                    <div id="supportMenu" class="absolute right-0 mt-2 w-44 opacity-0 invisible scale-95 transition-all duration-300 transform origin-top-right z-[100]">
+                        <div class="bg-[#0a0a0a] rounded-xl overflow-hidden py-1 border border-white/20 shadow-[0_15px_50px_rgba(0,0,0,0.8)]">
+                            <a href="https://wa.me/6281234567890" target="_blank" class="flex items-center px-4 py-3 hover:bg-white/10 transition-colors"><i class="fa-brands fa-whatsapp text-emerald-400 text-lg mr-3"></i><span class="text-white/90 text-xs font-bold tracking-wide">WhatsApp</span></a>
+                            <div class="h-px w-full bg-white/10"></div>
+                            <a href="https://t.me/sanlucid" target="_blank" class="flex items-center px-4 py-3 hover:bg-white/10 transition-colors"><i class="fa-brands fa-telegram text-blue-400 text-lg mr-3"></i><span class="text-white/90 text-xs font-bold tracking-wide">Telegram</span></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="border-t border-white/[0.08]">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div id="categoryContainer" class="flex space-x-6 overflow-x-auto py-3 scrollbar-hide text-xs font-medium tracking-wide">
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 relative z-10">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6" id="productGrid">
+            <!-- Loading Indicator -->
+            <div class="col-span-full text-center py-10 text-white/50" id="loadingText">
+                <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-cyan-400"></i>
+                <p>Mempersiapkan Etalase...</p>
+            </div>
+        </div>
+        <div class="mt-10 text-center hidden" id="loadMoreContainer">
+            <button onclick="loadMore()" class="px-8 py-3 bg-white/10 border border-white/20 hover:bg-white/20 text-white font-bold rounded-full transition-all shadow-lg">Lihat Lebih Banyak <i class="fa-solid fa-chevron-down ml-2"></i></button>
+        </div>
+        <div class="mt-10 text-center hidden" id="emptyState">
+            <i class="fa-solid fa-box-open text-5xl text-white/20 mb-4"></i>
+            <p class="text-white/50">Katalog masih kosong atau tidak ditemukan.</p>
+        </div>
+    </main>
+
+    <div id="mobileSearchFab" class="search-fab-container md:hidden">
+        <div class="fab-icon-box" onclick="toggleMobileSearch()"><i class="fa-solid fa-magnifying-glass text-white text-lg"></i></div>
+        <input type="text" id="mobileSearchInput" oninput="debounceSearch(this.value)" class="search-input-mobile" placeholder="Cari judul atau kategori...">
+        <div class="fab-close-btn" onclick="toggleMobileSearch()"><i class="fa-solid fa-xmark text-white/70 text-lg hover:text-white transition-colors"></i></div>
+    </div>
+
+    <!-- POP-UP DETAIL PRODUK -->
+    <div id="popupDetail" class="fixed inset-0 z-[100] hidden items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onclick="tutupPopupOverlay(event)">
+        <div class="flex flex-col items-center w-full max-w-sm" style="max-height: 95vh;">
+            <div class="bg-[#0f172a] border border-white/10 rounded-2xl w-full flex flex-col overflow-hidden shadow-[0_15px_50px_rgba(0,0,0,0.6)] popup-scale relative" style="max-height: calc(95vh - 70px);">
+                <div class="pt-5 pb-3 px-4 flex flex-col items-center text-center shrink-0 border-b border-white/5">
+                    <img id="popImg" src="" loading="lazy" decoding="async" alt="Cover Detail" class="w-24 md:w-28 h-auto object-cover rounded-lg shadow-lg mb-3 border border-white/10">
+                    <span id="popKategori" class="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-1"></span>
+                    <h3 id="popJudul" class="text-base font-bold text-white leading-tight"></h3>
+                </div>
+                <div class="p-4 overflow-y-auto grow text-sm text-white/70 leading-relaxed text-justify">
+                    <p id="popDeskripsi"></p>
+                </div>
+                <div class="p-4 bg-white/[0.03] border-t border-white/10 shrink-0">
+                    <a id="popSampleBtn" href="#" target="_blank" class="block w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white text-center text-sm font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                        <i class="fa-solid fa-file-pdf mr-2"></i> Baca Free Sample
+                    </a>
+                </div>
+            </div>
+            <button onclick="tutupPopup()" class="mt-4 bg-red-500 hover:bg-red-400 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-[0_4px_15px_rgba(239,68,68,0.5)] border border-white/20 transition-all shrink-0 popup-scale">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // API BACKEND (Untuk Checkout, Sample, dan Histori Pembelian)
+        const API_BASE_URL = "https://guleleng.onrender.com/api";
+        
+        // =========================================================================
+        // URL GITHUB RAW UNTUK KATALOG JSON (Ubah "NAMA_REPO_ANDA" Jika Diperlukan)
+        // =========================================================================
+        const GITHUB_CATALOG_URL = "katalog.json";
+
+        const ITEMS_PER_PAGE = 24; 
+        const CACHE_KEY = "sanlucid_db_cache";
+        
+        let appState = {
+            fingerprint: "",
+            allProducts: [],
+            filteredProducts: [],
+            purchasedMap: {},
+            currentPage: 1
+        };
+
+        // ==========================================
+        // 1. INISIALISASI SUPER CEPAT (HYBRID LOADING)
+        // ==========================================
+        async function initializeApp() {
+            const cachedData = localStorage.getItem(CACHE_KEY);
+            if (cachedData) {
+                try {
+                    appState.allProducts = JSON.parse(cachedData);
+                    appState.filteredProducts = [...appState.allProducts];
+                    renderCategories();
+                    renderProducts();
+                } catch(e) { console.warn("Cache rusak, memuat ulang."); }
+            }
+
+            fetchFreshData();
+            getFingerprintAndPurchases();
+        }
+
+        async function fetchFreshData() {
+            try {
+                // Menggunakan Cache-Buster agar selalu mendapatkan JSON ter-update dari GitHub
+                const cacheBuster = new Date().getTime();
+                const response = await fetch(`${GITHUB_CATALOG_URL}?v=${cacheBuster}`);
+                
+                if(response.ok) {
+                    const data = await response.json();
+                    let rawData = [];
+
+                    // Penanganan Struktur JSON
+                    if (Array.isArray(data)) {
+                        rawData = data;
+                    } else if (data && data.products) {
+                        rawData = data.products;
+                    }
+
+                    // 1. Filter: HANYA TAMPILKAN PRODUK AKTIF (is_active == 1)
+                    let freshData = rawData.filter(p => p.is_active === 1);
+
+                    // 2. Pemetaan (Mapping): GitHub punya "name", Halaman Web butuh "title"
+                    freshData = freshData.map(p => ({
+                        id: p.id,
+                        title: p.name || p.title, 
+                        price: p.price,
+                        kategori: p.kategori || "E-BOOK",
+                        deskripsi: p.deskripsi || "",
+                        cover_url: p.cover_url
+                    }));
+
+                    if (JSON.stringify(freshData) !== JSON.stringify(appState.allProducts)) {
+                        appState.allProducts = freshData;
+                        appState.filteredProducts = [...appState.allProducts];
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
+                        
+                        appState.currentPage = 1;
+                        renderCategories();
+                        renderProducts();
+                    }
+                }
+            } catch (error) {
+                if(!appState.allProducts.length) {
+                    document.getElementById('productGrid').innerHTML = '<div class="col-span-full text-center py-10 text-red-400 font-bold">Gagal mengambil katalog. Pastikan URL GitHub valid.</div>';
+                }
+            }
+        }
+
+        async function getFingerprintAndPurchases() {
+            try {
+                const fp = await window.FingerprintJS.load();
+                const result = await fp.get();
+                appState.fingerprint = result.visitorId;
+            } catch (error) {
+                let fallbackId = localStorage.getItem('sanlucid_fallback_id');
+                if (!fallbackId) {
+                    fallbackId = 'anon-' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('sanlucid_fallback_id', fallbackId);
+                }
+                appState.fingerprint = fallbackId;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/purchases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fingerprint: appState.fingerprint })
+                });
+
+                if(response.ok) {
+                    const data = await response.json();
+                    appState.purchasedMap = data.purchases || {};
+                    updatePurchaseButtons(); 
+                }
+            } catch (e) { console.warn("Pengecekan riwayat gagal."); }
+        }
+
+        // ==========================================
+        // 2. SISTEM RENDER DOM RINGAN
+        // ==========================================
+        function renderCategories() {
+            const container = document.getElementById('categoryContainer');
+            const uniqueCategories = [...new Set(appState.allProducts.map(p => p.kategori).filter(Boolean))];
+            let html = `<button onclick="filterByCategory('', this)" class="category-btn text-cyan-400 whitespace-nowrap font-bold">Semua E-Book</button>`;
+            uniqueCategories.forEach(cat => {
+                html += `<button onclick="filterByCategory('${cat}', this)" class="category-btn text-white/70 hover:text-white whitespace-nowrap transition-colors uppercase">${cat}</button>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function renderProducts(append = false) {
+            const grid = document.getElementById('productGrid');
+            const loadMoreBtn = document.getElementById('loadMoreContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            if(!append) grid.innerHTML = ''; 
+
+            if(appState.filteredProducts.length === 0) {
+                emptyState.classList.remove('hidden');
+                loadMoreBtn.classList.add('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            const startIndex = (appState.currentPage - 1) * ITEMS_PER_PAGE;
+            const endIndex = startIndex + ITEMS_PER_PAGE;
+            const itemsToRender = appState.filteredProducts.slice(startIndex, endIndex);
+
+            const fragment = document.createDocumentFragment();
+
+            itemsToRender.forEach(product => {
+                const isPurchased = appState.purchasedMap[product.id];
+                const priceFormatted = new Intl.NumberFormat('id-ID').format(product.price);
+                const safeDesc = encodeURIComponent(product.deskripsi.replace(/\n/g, '<br>'));
+                
+                // Gunakan URL Placeholder jika tidak ada cover
+                let safeImg = "https://placehold.co/300x450/1e293b/94a3b8?text=No+Cover";
+                if (product.cover_url && product.cover_url.trim() !== "") {
+                    safeImg = `https://wsrv.nl/?url=${product.cover_url.replace("i.ibb.co", "i.ibb.co.com")}&w=300&output=webp`;
+                }
+                
+                const sampleLink = `${API_BASE_URL}/sample/${product.id}`;
+                const masterDownloadUrl = `${API_BASE_URL}/download/${product.id}?fingerprint=${appState.fingerprint}`;
+                
+                const safeTitle = product.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const actionPopup = `bukaPopup('${safeImg}', '${product.kategori}', '${safeTitle}', decodeURIComponent('${safeDesc}'), '${sampleLink}')`;
+
+                const buttonHtml = isPurchased 
+                    ? `<a href="${masterDownloadUrl}" target="_blank" class="block w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-center text-[10px] md:text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"><i class="fa-solid fa-cloud-arrow-down mr-1"></i> Unduh File</a>`
+                    : `<button id="btn-${product.id}" onclick="processCheckout('${product.id}')" class="w-full py-2 bg-white/10 border border-white/20 text-white/90 hover:bg-white/20 text-[10px] md:text-xs font-semibold rounded-xl transition-colors">Beli Sekarang</button>`;
+
+                const card = document.createElement('div');
+                card.className = "glass-card flex flex-col rounded-2xl overflow-hidden";
+                card.innerHTML = `
+                    <div class="aspect-[2/3] bg-black/40 relative overflow-hidden p-2 md:p-3 group">
+                        
+                        <button onclick="${actionPopup}" class="absolute top-2 left-2 md:top-3 md:left-3 bg-black/60 hover:bg-cyan-500 w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full text-white border border-white/20 z-30 transition-all shadow-lg">
+                            <i class="fa-solid fa-eye text-[10px] md:text-xs"></i>
+                        </button>
+                        
+                        <div class="absolute inset-0 bg-gradient-to-tr from-white/[0.15] to-transparent pointer-events-none z-10"></div>
+                        
+                        <img onclick="${actionPopup}" src="${safeImg}" loading="lazy" decoding="async" alt="Cover" class="w-full h-full object-cover rounded-lg md:rounded-xl shadow-md group-hover:scale-105 transition-transform duration-500 cursor-pointer">
+                        
+                        <div class="absolute top-3 right-3 md:top-5 md:right-5 bg-black/60 px-1.5 py-0.5 md:px-2 md:py-1 rounded text-[8px] md:text-[9px] font-bold tracking-widest text-white border border-white/20 z-20">PDF</div>
+                    </div>
+                    
+                    <div class="p-3 md:p-4 flex flex-col flex-1">
+                        <h3 onclick="${actionPopup}" class="text-xs md:text-sm font-bold text-white line-clamp-2 leading-snug mb-1 cursor-pointer hover:text-cyan-400 transition-colors">${product.title}</h3>
+                        
+                        <p class="text-[9px] md:text-[11px] text-white/50 mb-2 font-medium uppercase tracking-wider">${product.kategori}</p>
+                        <div class="mt-auto mb-3"><span class="text-cyan-400 font-black text-xs md:text-sm">Rp ${priceFormatted}</span></div>
+                        <div class="mt-auto" id="container-btn-${product.id}">${buttonHtml}</div>
+                    </div>
+                `;
+                fragment.appendChild(card);
+            });
+
+            grid.appendChild(fragment);
+
+            if(endIndex < appState.filteredProducts.length) {
+                loadMoreBtn.classList.remove('hidden');
+            } else {
+                loadMoreBtn.classList.add('hidden');
+            }
+        }
+
+        // FUNGSI UPDATE TOMBOL TANPA RENDER ULANG SELURUH GRID
+        function updatePurchaseButtons() {
+            Object.keys(appState.purchasedMap).forEach(productId => {
+                const btnContainer = document.getElementById(`container-btn-${productId}`);
+                if (btnContainer) {
+                    const masterDownloadUrl = `${API_BASE_URL}/download/${productId}?fingerprint=${appState.fingerprint}`;
+                    btnContainer.innerHTML = `<a href="${masterDownloadUrl}" target="_blank" class="block w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-center text-[10px] md:text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"><i class="fa-solid fa-cloud-arrow-down mr-1"></i> Unduh File</a>`;
+                }
+            });
+        }
+
+        // ==========================================
+        // 3. FITUR PENCARIAN (DEBOUNCE SEARCH)
+        // ==========================================
+        let searchTimeout;
+        function debounceSearch(query) {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                executeSearch(query);
+            }, 300);
+        }
+
+        function executeSearch(query) {
+            const lowerQuery = query.toLowerCase().trim();
+            document.getElementById('desktopSearch').value = query;
+            document.getElementById('mobileSearchInput').value = query;
+
+            if (lowerQuery !== "") {
+                document.querySelectorAll('.category-btn').forEach((btn, index) => {
+                    if(index === 0) { btn.classList.add('text-cyan-400', 'font-bold'); btn.classList.remove('text-white/70'); } 
+                    else { btn.classList.remove('text-cyan-400', 'font-bold'); btn.classList.add('text-white/70'); }
+                });
+            }
+
+            if(lowerQuery === "") {
+                appState.filteredProducts = [...appState.allProducts];
+            } else {
+                appState.filteredProducts = appState.allProducts.filter(p => 
+                    p.title.toLowerCase().includes(lowerQuery) || 
+                    (p.kategori && p.kategori.toLowerCase().includes(lowerQuery)) || 
+                    (p.deskripsi && p.deskripsi.toLowerCase().includes(lowerQuery))
+                );
+            }
+            appState.currentPage = 1;
+            renderProducts(false);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ==========================================
+        // 4. LOGIKA PENDUKUNG LAINNYA
+        // ==========================================
+        function filterByCategory(kategori, btnElement) {
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.remove('text-cyan-400', 'font-bold');
+                btn.classList.add('text-white/70');
+            });
+            btnElement.classList.remove('text-white/70');
+            btnElement.classList.add('text-cyan-400', 'font-bold');
+            document.getElementById('desktopSearch').value = '';
+            document.getElementById('mobileSearchInput').value = '';
+
+            if (kategori === '') appState.filteredProducts = [...appState.allProducts];
+            else appState.filteredProducts = appState.allProducts.filter(p => p.kategori === kategori);
+            
+            appState.currentPage = 1;
+            renderProducts(false);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function loadMore() {
+            appState.currentPage++;
+            renderProducts(true);
+        }
+
+        function bukaPopup(gambar, kategori, judul, deskripsi, linkSample) {
+            document.getElementById('popImg').src = gambar;
+            document.getElementById('popKategori').innerText = kategori;
+            document.getElementById('popJudul').innerText = judul;
+            document.getElementById('popDeskripsi').innerHTML = deskripsi;
+            document.getElementById('popSampleBtn').href = linkSample;
+            const popup = document.getElementById('popupDetail');
+            popup.classList.remove('hidden'); popup.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function tutupPopup() {
+            const popup = document.getElementById('popupDetail');
+            popup.classList.add('hidden'); popup.classList.remove('flex');
+            document.body.style.overflow = 'auto';
+        }
+
+        function tutupPopupOverlay(event) { if (event.target.id === 'popupDetail') tutupPopup(); }
+
+        function toggleMobileSearch() {
+            const fab = document.getElementById('mobileSearchFab');
+            const input = document.getElementById('mobileSearchInput');
+            if (fab.classList.contains('expanded')) {
+                fab.classList.remove('expanded'); input.blur();
+                if(input.value.trim() !== '') executeSearch(''); 
+            } else {
+                fab.classList.add('expanded'); setTimeout(() => input.focus(), 300);
+            }
+        }
+
+        function toggleSupportMenu() {
+            const menu = document.getElementById('supportMenu');
+            const icon = document.getElementById('supportIcon');
+            if (menu.classList.contains('opacity-0')) {
+                menu.classList.remove('opacity-0', 'invisible', 'scale-95'); menu.classList.add('opacity-100', 'visible', 'scale-100'); icon.classList.add('rotate-180');
+            } else {
+                menu.classList.add('opacity-0', 'invisible', 'scale-95'); menu.classList.remove('opacity-100', 'visible', 'scale-100'); icon.classList.remove('rotate-180');
+            }
+        }
+
+        document.addEventListener('click', (event) => {
+            const menu = document.getElementById('supportMenu');
+            const btn = document.getElementById('supportBtn');
+            const icon = document.getElementById('supportIcon');
+            if (menu && btn && !menu.contains(event.target) && !btn.contains(event.target)) {
+                menu.classList.add('opacity-0', 'invisible', 'scale-95'); menu.classList.remove('opacity-100', 'visible', 'scale-100'); icon.classList.remove('rotate-180');
+            }
+        });
+
+        async function processCheckout(productId) {
+            try {
+                const btn = document.getElementById(`btn-${productId}`);
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Proses...';
+                btn.disabled = true;
+
+                const response = await fetch(`${API_BASE_URL}/checkout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_id: productId, fingerprint: appState.fingerprint })
+                });
+
+                const data = await response.json();
+                
+                if(response.ok) {
+                    alert(`✅ ID Pesanan: ${data.order_id}\n\nDi sinilah Anda nantinya mengarahkan pembeli ke halaman pembayaran Pakkasir!`);
+                } else {
+                    alert("Gagal membuat pesanan.");
+                }
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            } catch (error) {
+                alert("Gagal menghubungi server pusat.");
+                const btn = document.getElementById(`btn-${productId}`);
+                btn.innerHTML = 'Beli Sekarang';
+                btn.disabled = false;
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const script = document.createElement('script');
+            script.src = "https://openfpcdn.io/fingerprintjs/v4";
+            script.async = true;
+            script.onload = initializeApp;
+            script.onerror = initializeApp; 
+            document.head.appendChild(script);
+        });
+    </script>
+</body>
+</html>
