@@ -13,8 +13,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- FINGERPRINT DIMUAT SECARA ASYNCHRONOUS AGAR TIDAK BLOKIR RENDER HALAMAN -->
-    <script async src="https://openfpcdn.io/fingerprintjs/v4"></script>
+    <!-- Pemuatan script Fingerprint ganda di bagian head telah dihapus agar tidak bentrok -->
 
     <style>
         ::-webkit-scrollbar { width: 8px; }
@@ -226,9 +225,14 @@
 
         async function getFingerprintAndPurchases() {
             try {
-                const fp = await window.FingerprintJS.load();
-                const result = await fp.get();
-                appState.fingerprint = result.visitorId;
+                // Pastikan pustaka sudah termuat sebelum dipanggil
+                if (window.FingerprintJS) {
+                    const fp = await window.FingerprintJS.load();
+                    const result = await fp.get();
+                    appState.fingerprint = result.visitorId;
+                } else {
+                    throw new Error("FingerprintJS belum termuat");
+                }
             } catch (error) {
                 let fallbackId = localStorage.getItem('sanlucid_fallback_id');
                 if (!fallbackId) {
@@ -497,9 +501,10 @@
             }
         }
 
+        // MENGGANTI TAUTAN FINGERPRINTJS KE VERSI UMD AGAR DIDUKUNG BROWSER
         document.addEventListener("DOMContentLoaded", () => {
             const script = document.createElement('script');
-            script.src = "https://openfpcdn.io/fingerprintjs/v4";
+            script.src = "https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"; 
             script.async = true;
             script.onload = initializeApp;
             script.onerror = initializeApp; 
