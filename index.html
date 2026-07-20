@@ -195,7 +195,7 @@
             hasMore: false,
             isLoading: false,
             pendingProductId: null,
-            currentOrderId: null // Menyimpan ID pesanan untuk simulasi Sandbox
+            currentOrderId: null
         };
 
         let qrisCheckInterval; 
@@ -527,22 +527,30 @@
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Proses...';
                 btn.disabled = true;
 
+                // SISTEM TIMEOUT 15 DETIK AGAR TIDAK MUTER SELAMANYA SAAT DIBLOKIR
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+
                 const response = await fetch(`${API_BASE_URL}/checkout`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ product_id: productId, fingerprint: appState.fingerprint })
+                    body: JSON.stringify({ product_id: productId, fingerprint: appState.fingerprint }),
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeoutId); // Matikan timer jika fetch berhasil membalas
 
                 const data = await response.json();
                 
                 if (response.ok && data.qr_string) {
                     appState.pendingProductId = productId; 
-                    appState.currentOrderId = data.order_id; // Simpan ID untuk fungsi simulasi
+                    appState.currentOrderId = data.order_id;
                     
-                    // Kembalikan tombol simulasi ke state awal (berjaga-jaga jika sebelumnya dipencet)
                     const btnSimulate = document.getElementById('btnSimulate');
-                    btnSimulate.innerHTML = 'Simulasikan pembayaran';
-                    btnSimulate.disabled = false;
+                    if(btnSimulate) {
+                        btnSimulate.innerHTML = 'Simulasikan pembayaran';
+                        btnSimulate.disabled = false;
+                    }
 
                     showQrisPopup(data.qr_string, data.total_payment);
                 } else {
@@ -551,7 +559,11 @@
                     btn.disabled = false;
                 }
             } catch (error) {
-                alert("Gagal menghubungi server pusat.");
+                if (error.name === 'AbortError') {
+                    alert("Koneksi ditahan oleh Browser! Jika Anda menggunakan Brave/Adblock, mohon matikan fitur Shields untuk situs ini.");
+                } else {
+                    alert("Gagal menghubungi server pusat karena kendala jaringan atau diblokir peramban privasi.");
+                }
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
@@ -575,8 +587,6 @@
 
                 if (response.ok) {
                     btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Simulasi sukses, menunggu auto-refresh...';
-                    // Kita tidak perlu berbuat apa-apa lagi di sini, karena timer qrisCheckInterval 
-                    // akan mengecek server dalam hitungan detik dan menutup popup secara otomatis.
                 } else {
                     alert("Gagal simulasi. Pastikan Proyek Pakasir Anda berada di mode Sandbox.");
                     btn.innerHTML = originalText;
