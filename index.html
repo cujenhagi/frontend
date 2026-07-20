@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sanlucid Digital E-Books</title>
     
-    <!-- PRECONNECT UNTUK MEMPERCEPAT KONEKSI KE SERVER RUST & CDN GAMBAR -->
     <link rel="preconnect" href="https://backend-8occ.onrender.com" crossorigin>
     <link rel="preconnect" href="https://wsrv.nl" crossorigin>
     <link rel="dns-prefetch" href="https://wsrv.nl">
@@ -13,7 +12,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Pemuatan script Fingerprint ganda di bagian head telah dihapus agar tidak bentrok -->
+    <!-- FINGERPRINT JS DIPINDAH KE SINI AGAR TIDAK DICEGAT EKSTENSI BROWSER -->
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
 
     <style>
         ::-webkit-scrollbar { width: 8px; }
@@ -104,7 +104,7 @@
         </div>
         <div class="mt-10 text-center hidden" id="emptyState">
             <i class="fa-solid fa-box-open text-5xl text-white/20 mb-4"></i>
-            <p class="text-white/50">Katalog masih kosong atau tidak ditemukan.</p>
+            <p class="text-white/50" id="emptyStateMsg">Katalog masih kosong atau tidak ditemukan.</p>
         </div>
     </main>
 
@@ -139,14 +139,8 @@
     </div>
 
     <script>
-        // API BACKEND (Untuk Checkout, Sample, dan Histori Pembelian)
         const API_BASE_URL = "https://backend-8occ.onrender.com/api";
-        
-        // =========================================================================
-        // URL GITHUB RAW UNTUK KATALOG JSON (Ubah "NAMA_REPO_ANDA" Jika Diperlukan)
-        // =========================================================================
         const GITHUB_CATALOG_URL = "katalog.json";
-
         const ITEMS_PER_PAGE = 24; 
         const CACHE_KEY = "sanlucid_db_cache";
         
@@ -158,9 +152,19 @@
             currentPage: 1
         };
 
-        // ==========================================
-        // 1. INISIALISASI SUPER CEPAT (HYBRID LOADING)
-        // ==========================================
+        // SAFETY NET: Jika lebih dari 8 detik sistem masih loading, paksa berhenti!
+        setTimeout(() => {
+            const grid = document.getElementById('productGrid');
+            if (grid && grid.innerHTML.includes('Mempersiapkan Etalase')) {
+                grid.innerHTML = `
+                    <div class="col-span-full text-center py-10 text-rose-400 font-bold">
+                        <i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><br>
+                        Gagal memuat katalog.<br>
+                        <span class="text-xs text-white/50 font-normal mt-2 block">Katalog belum disinkronkan. Silakan tekan tombol "Sinkronkan dari TiDB" di Dashboard Admin.</span>
+                    </div>`;
+            }
+        }, 8000);
+
         async function initializeApp() {
             const cachedData = localStorage.getItem(CACHE_KEY);
             if (cachedData) {
@@ -178,54 +182,63 @@
 
         async function fetchFreshData() {
             try {
-                // Menggunakan Cache-Buster agar selalu mendapatkan JSON ter-update dari GitHub
                 const cacheBuster = new Date().getTime();
                 const response = await fetch(`${GITHUB_CATALOG_URL}?v=${cacheBuster}`);
                 
-                if(response.ok) {
-                    const data = await response.json();
-                    let rawData = [];
-
-                    // Penanganan Struktur JSON
-                    if (Array.isArray(data)) {
-                        rawData = data;
-                    } else if (data && data.products) {
-                        rawData = data.products;
-                    }
-
-                    // 1. Filter: HANYA TAMPILKAN PRODUK AKTIF (is_active == 1)
-                    let freshData = rawData.filter(p => p.is_active === 1);
-
-                    // 2. Pemetaan (Mapping): GitHub punya "name", Halaman Web butuh "title"
-                    freshData = freshData.map(p => ({
-                        id: p.id,
-                        title: p.name || p.title, 
-                        price: p.price,
-                        kategori: p.kategori || "E-BOOK",
-                        deskripsi: p.deskripsi || "",
-                        cover_url: p.cover_url
-                    }));
-
-                    if (JSON.stringify(freshData) !== JSON.stringify(appState.allProducts)) {
-                        appState.allProducts = freshData;
-                        appState.filteredProducts = [...appState.allProducts];
-                        localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
-                        
-                        appState.currentPage = 1;
-                        renderCategories();
-                        renderProducts();
-                    }
+                if(!response.ok) {
+                    throw new Error(`Katalog belum ada (Status ${response.status}).`);
                 }
+                
+                // Mencegah error Parsing JSON jika file masih berbentuk HTML 404
+                const textData = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(textData);
+                } catch (jsonErr) {
+                    throw new Error("Format file katalog tidak valid. Pastikan Anda sudah Sinkronkan dari TiDB.");
+                }
+
+                let rawData = [];
+                if (Array.isArray(data)) {
+                    rawData = data;
+                } else if (data && data.products) {
+                    rawData = data.products;
+                }
+
+                let freshData = rawData.filter(p => p.is_active === 1);
+
+                freshData = freshData.map(p => ({
+                    id: p.id,
+                    title: p.name || p.title, 
+                    price: p.price,
+                    kategori: p.kategori || "E-BOOK",
+                    deskripsi: p.deskripsi || "",
+                    cover_url: p.cover_url
+                }));
+
+                appState.allProducts = freshData;
+                appState.filteredProducts = [...appState.allProducts];
+                localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
+                
+                appState.currentPage = 1;
+                renderCategories();
+                renderProducts();
+
             } catch (error) {
+                console.error(error);
                 if(!appState.allProducts.length) {
-                    document.getElementById('productGrid').innerHTML = '<div class="col-span-full text-center py-10 text-red-400 font-bold">Gagal mengambil katalog. Pastikan URL GitHub valid.</div>';
+                    document.getElementById('productGrid').innerHTML = `
+                    <div class="col-span-full text-center py-10 text-rose-400 font-bold">
+                        <i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><br>
+                        Data Katalog Belum Tersedia.<br>
+                        <span class="text-xs text-white/50 font-normal mt-2 block">${error.message}<br>Silakan Sinkronkan dari TiDB di Dashboard Admin.</span>
+                    </div>`;
                 }
             }
         }
 
         async function getFingerprintAndPurchases() {
             try {
-                // Pastikan pustaka sudah termuat sebelum dipanggil
                 if (window.FingerprintJS) {
                     const fp = await window.FingerprintJS.load();
                     const result = await fp.get();
@@ -257,9 +270,6 @@
             } catch (e) { console.warn("Pengecekan riwayat gagal."); }
         }
 
-        // ==========================================
-        // 2. SISTEM RENDER DOM RINGAN
-        // ==========================================
         function renderCategories() {
             const container = document.getElementById('categoryContainer');
             const uniqueCategories = [...new Set(appState.allProducts.map(p => p.kategori).filter(Boolean))];
@@ -296,7 +306,6 @@
                 const priceFormatted = new Intl.NumberFormat('id-ID').format(product.price);
                 const safeDesc = encodeURIComponent(product.deskripsi.replace(/\n/g, '<br>'));
                 
-                // Gunakan URL Placeholder jika tidak ada cover
                 let safeImg = "https://placehold.co/300x450/1e293b/94a3b8?text=No+Cover";
                 if (product.cover_url && product.cover_url.trim() !== "") {
                     safeImg = `https://wsrv.nl/?url=${product.cover_url.replace("i.ibb.co", "i.ibb.co.com")}&w=300&output=webp`;
@@ -316,21 +325,16 @@
                 card.className = "glass-card flex flex-col rounded-2xl overflow-hidden";
                 card.innerHTML = `
                     <div class="aspect-[2/3] bg-black/40 relative overflow-hidden p-2 md:p-3 group">
-                        
                         <button onclick="${actionPopup}" class="absolute top-2 left-2 md:top-3 md:left-3 bg-black/60 hover:bg-cyan-500 w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-full text-white border border-white/20 z-30 transition-all shadow-lg">
                             <i class="fa-solid fa-eye text-[10px] md:text-xs"></i>
                         </button>
-                        
                         <div class="absolute inset-0 bg-gradient-to-tr from-white/[0.15] to-transparent pointer-events-none z-10"></div>
-                        
                         <img onclick="${actionPopup}" src="${safeImg}" loading="lazy" decoding="async" alt="Cover" class="w-full h-full object-cover rounded-lg md:rounded-xl shadow-md group-hover:scale-105 transition-transform duration-500 cursor-pointer">
-                        
                         <div class="absolute top-3 right-3 md:top-5 md:right-5 bg-black/60 px-1.5 py-0.5 md:px-2 md:py-1 rounded text-[8px] md:text-[9px] font-bold tracking-widest text-white border border-white/20 z-20">PDF</div>
                     </div>
                     
                     <div class="p-3 md:p-4 flex flex-col flex-1">
                         <h3 onclick="${actionPopup}" class="text-xs md:text-sm font-bold text-white line-clamp-2 leading-snug mb-1 cursor-pointer hover:text-cyan-400 transition-colors">${product.title}</h3>
-                        
                         <p class="text-[9px] md:text-[11px] text-white/50 mb-2 font-medium uppercase tracking-wider">${product.kategori}</p>
                         <div class="mt-auto mb-3"><span class="text-cyan-400 font-black text-xs md:text-sm">Rp ${priceFormatted}</span></div>
                         <div class="mt-auto" id="container-btn-${product.id}">${buttonHtml}</div>
@@ -348,7 +352,6 @@
             }
         }
 
-        // FUNGSI UPDATE TOMBOL TANPA RENDER ULANG SELURUH GRID
         function updatePurchaseButtons() {
             Object.keys(appState.purchasedMap).forEach(productId => {
                 const btnContainer = document.getElementById(`container-btn-${productId}`);
@@ -359,9 +362,6 @@
             });
         }
 
-        // ==========================================
-        // 3. FITUR PENCARIAN (DEBOUNCE SEARCH)
-        // ==========================================
         let searchTimeout;
         function debounceSearch(query) {
             clearTimeout(searchTimeout);
@@ -396,9 +396,6 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // ==========================================
-        // 4. LOGIKA PENDUKUNG LAINNYA
-        // ==========================================
         function filterByCategory(kategori, btnElement) {
             document.querySelectorAll('.category-btn').forEach(btn => {
                 btn.classList.remove('text-cyan-400', 'font-bold');
@@ -501,14 +498,9 @@
             }
         }
 
-        // MENGGANTI TAUTAN FINGERPRINTJS KE VERSI UMD AGAR DIDUKUNG BROWSER
+        // PANGGIL INITIALIZEAPP SECARA LANGSUNG SAAT HALAMAN DIMUAT
         document.addEventListener("DOMContentLoaded", () => {
-            const script = document.createElement('script');
-            script.src = "https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"; 
-            script.async = true;
-            script.onload = initializeApp;
-            script.onerror = initializeApp; 
-            document.head.appendChild(script);
+            initializeApp();
         });
     </script>
 </body>
