@@ -11,8 +11,6 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- FINGERPRINT JS DIPINDAH KE SINI AGAR TIDAK DICEGAT EKSTENSI BROWSER -->
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
 
     <style>
@@ -86,6 +84,7 @@
         <div class="border-t border-white/[0.08]">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div id="categoryContainer" class="flex space-x-6 overflow-x-auto py-3 scrollbar-hide text-xs font-medium tracking-wide">
+                    <!-- Kategori dirender lewat JS -->
                 </div>
             </div>
         </div>
@@ -93,11 +92,7 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 relative z-10">
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6" id="productGrid">
-            <!-- Loading Indicator -->
-            <div class="col-span-full text-center py-10 text-white/50" id="loadingText">
-                <i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-cyan-400"></i>
-                <p>Mempersiapkan Etalase...</p>
-            </div>
+            <!-- Isi produk -->
         </div>
         <div class="mt-10 text-center hidden" id="loadMoreContainer">
             <button onclick="loadMore()" class="px-8 py-3 bg-white/10 border border-white/20 hover:bg-white/20 text-white font-bold rounded-full transition-all shadow-lg">Lihat Lebih Banyak <i class="fa-solid fa-chevron-down ml-2"></i></button>
@@ -140,171 +135,92 @@
 
     <script>
         const API_BASE_URL = "https://backend-8occ.onrender.com/api";
-        const GITHUB_CATALOG_URL = "katalog.json";
         const ITEMS_PER_PAGE = 24; 
-        const CACHE_KEY = "sanlucid_db_cache";
         
         let appState = {
             fingerprint: "",
-            allProducts: [],
-            filteredProducts: [],
             purchasedMap: {},
-            currentPage: 1
+            currentPage: 1,
+            currentSearch: "",
+            currentKategori: "",
+            hasMore: false,
+            isLoading: false
         };
 
-        // SAFETY NET: Jika lebih dari 8 detik sistem masih loading, paksa berhenti!
-        setTimeout(() => {
-            const grid = document.getElementById('productGrid');
-            if (grid && grid.innerHTML.includes('Mempersiapkan Etalase')) {
-                grid.innerHTML = `
-                    <div class="col-span-full text-center py-10 text-rose-400 font-bold">
-                        <i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><br>
-                        Gagal memuat katalog.<br>
-                        <span class="text-xs text-white/50 font-normal mt-2 block">Katalog belum disinkronkan. Silakan tekan tombol "Sinkronkan dari TiDB" di Dashboard Admin.</span>
-                    </div>`;
-            }
-        }, 8000);
-
         async function initializeApp() {
-            const cachedData = localStorage.getItem(CACHE_KEY);
-            if (cachedData) {
-                try {
-                    appState.allProducts = JSON.parse(cachedData);
-                    appState.filteredProducts = [...appState.allProducts];
-                    renderCategories();
-                    renderProducts();
-                } catch(e) { console.warn("Cache rusak, memuat ulang."); }
-            }
-
-            fetchFreshData();
-            getFingerprintAndPurchases();
+            await getFingerprintAndPurchases();
+            await fetchCategories();
+            await fetchProducts(false);
         }
 
-        async function fetchFreshData() {
+        async function fetchCategories() {
             try {
-                const cacheBuster = new Date().getTime();
-                const response = await fetch(`${GITHUB_CATALOG_URL}?v=${cacheBuster}`);
-                
-                if(!response.ok) {
-                    throw new Error(`Katalog belum ada (Status ${response.status}).`);
+                const res = await fetch(`${API_BASE_URL}/categories`);
+                if(res.ok) {
+                    const cats = await res.json();
+                    const container = document.getElementById('categoryContainer');
+                    let html = `<button onclick="filterByCategory('', this)" class="category-btn text-cyan-400 whitespace-nowrap font-bold">Semua E-Book</button>`;
+                    cats.forEach(cat => {
+                        html += `<button onclick="filterByCategory('${cat}', this)" class="category-btn text-white/70 hover:text-white whitespace-nowrap transition-colors uppercase">${cat}</button>`;
+                    });
+                    container.innerHTML = html;
                 }
-                
-                // Mencegah error Parsing JSON jika file masih berbentuk HTML 404
-                const textData = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(textData);
-                } catch (jsonErr) {
-                    throw new Error("Format file katalog tidak valid. Pastikan Anda sudah Sinkronkan dari TiDB.");
-                }
-
-                let rawData = [];
-                if (Array.isArray(data)) {
-                    rawData = data;
-                } else if (data && data.products) {
-                    rawData = data.products;
-                }
-
-                let freshData = rawData.filter(p => p.is_active === 1);
-
-                freshData = freshData.map(p => ({
-                    id: p.id,
-                    title: p.name || p.title, 
-                    price: p.price,
-                    kategori: p.kategori || "E-BOOK",
-                    deskripsi: p.deskripsi || "",
-                    cover_url: p.cover_url
-                }));
-
-                appState.allProducts = freshData;
-                appState.filteredProducts = [...appState.allProducts];
-                localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
-                
-                appState.currentPage = 1;
-                renderCategories();
-                renderProducts();
-
-            } catch (error) {
-                console.error(error);
-                if(!appState.allProducts.length) {
-                    document.getElementById('productGrid').innerHTML = `
-                    <div class="col-span-full text-center py-10 text-rose-400 font-bold">
-                        <i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><br>
-                        Data Katalog Belum Tersedia.<br>
-                        <span class="text-xs text-white/50 font-normal mt-2 block">${error.message}<br>Silakan Sinkronkan dari TiDB di Dashboard Admin.</span>
-                    </div>`;
-                }
-            }
+            } catch(e) {}
         }
 
-        async function getFingerprintAndPurchases() {
-            try {
-                if (window.FingerprintJS) {
-                    const fp = await window.FingerprintJS.load();
-                    const result = await fp.get();
-                    appState.fingerprint = result.visitorId;
-                } else {
-                    throw new Error("FingerprintJS belum termuat");
-                }
-            } catch (error) {
-                let fallbackId = localStorage.getItem('sanlucid_fallback_id');
-                if (!fallbackId) {
-                    fallbackId = 'anon-' + Math.random().toString(36).substr(2, 9);
-                    localStorage.setItem('sanlucid_fallback_id', fallbackId);
-                }
-                appState.fingerprint = fallbackId;
-            }
+        async function fetchProducts(append = false) {
+            if(appState.isLoading) return;
+            appState.isLoading = true;
 
-            try {
-                const response = await fetch(`${API_BASE_URL}/purchases`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fingerprint: appState.fingerprint })
-                });
-
-                if(response.ok) {
-                    const data = await response.json();
-                    appState.purchasedMap = data.purchases || {};
-                    updatePurchaseButtons(); 
-                }
-            } catch (e) { console.warn("Pengecekan riwayat gagal."); }
-        }
-
-        function renderCategories() {
-            const container = document.getElementById('categoryContainer');
-            const uniqueCategories = [...new Set(appState.allProducts.map(p => p.kategori).filter(Boolean))];
-            let html = `<button onclick="filterByCategory('', this)" class="category-btn text-cyan-400 whitespace-nowrap font-bold">Semua E-Book</button>`;
-            uniqueCategories.forEach(cat => {
-                html += `<button onclick="filterByCategory('${cat}', this)" class="category-btn text-white/70 hover:text-white whitespace-nowrap transition-colors uppercase">${cat}</button>`;
-            });
-            container.innerHTML = html;
-        }
-
-        function renderProducts(append = false) {
             const grid = document.getElementById('productGrid');
             const loadMoreBtn = document.getElementById('loadMoreContainer');
             const emptyState = document.getElementById('emptyState');
 
-            if(!append) grid.innerHTML = ''; 
-
-            if(appState.filteredProducts.length === 0) {
-                emptyState.classList.remove('hidden');
+            if (!append) {
+                grid.innerHTML = '<div class="col-span-full text-center py-10 text-white/50"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-cyan-400"></i><p>Memuat Data Server...</p></div>';
                 loadMoreBtn.classList.add('hidden');
-                return;
-            } else {
                 emptyState.classList.add('hidden');
             }
 
-            const startIndex = (appState.currentPage - 1) * ITEMS_PER_PAGE;
-            const endIndex = startIndex + ITEMS_PER_PAGE;
-            const itemsToRender = appState.filteredProducts.slice(startIndex, endIndex);
+            try {
+                const url = `${API_BASE_URL}/products?page=${appState.currentPage}&limit=${ITEMS_PER_PAGE}&search=${encodeURIComponent(appState.currentSearch)}&kategori=${encodeURIComponent(appState.currentKategori)}`;
+                const res = await fetch(url);
+                if(!res.ok) throw new Error("Gagal terhubung ke database peladen.");
+                
+                const data = await res.json();
+                
+                if (!append) grid.innerHTML = '';
+                
+                if (data.products.length === 0 && !append) {
+                    emptyState.classList.remove('hidden');
+                } else {
+                    emptyState.classList.add('hidden');
+                    renderCards(data.products, grid);
+                }
 
+                appState.hasMore = data.has_more;
+                if (appState.hasMore) {
+                    loadMoreBtn.classList.remove('hidden');
+                } else {
+                    loadMoreBtn.classList.add('hidden');
+                }
+
+            } catch (e) {
+                if(!append) {
+                    grid.innerHTML = `<div class="col-span-full text-center py-10 text-rose-400 font-bold"><i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><br>Gagal memuat katalog.<br><span class="text-xs text-white/50 font-normal mt-2 block">${e.message}</span></div>`;
+                }
+            } finally {
+                appState.isLoading = false;
+            }
+        }
+
+        function renderCards(productsArray, gridElement) {
             const fragment = document.createDocumentFragment();
 
-            itemsToRender.forEach(product => {
+            productsArray.forEach(product => {
                 const isPurchased = appState.purchasedMap[product.id];
                 const priceFormatted = new Intl.NumberFormat('id-ID').format(product.price);
-                const safeDesc = encodeURIComponent(product.deskripsi.replace(/\n/g, '<br>'));
+                const safeDesc = encodeURIComponent((product.deskripsi || "").replace(/\n/g, '<br>'));
                 
                 let safeImg = "https://placehold.co/300x450/1e293b/94a3b8?text=No+Cover";
                 if (product.cover_url && product.cover_url.trim() !== "") {
@@ -313,8 +229,7 @@
                 
                 const sampleLink = `${API_BASE_URL}/sample/${product.id}`;
                 const masterDownloadUrl = `${API_BASE_URL}/download/${product.id}?fingerprint=${appState.fingerprint}`;
-                
-                const safeTitle = product.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeTitle = (product.title || "Tanpa Judul").replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const actionPopup = `bukaPopup('${safeImg}', '${product.kategori}', '${safeTitle}', decodeURIComponent('${safeDesc}'), '${sampleLink}')`;
 
                 const buttonHtml = isPurchased 
@@ -332,7 +247,6 @@
                         <img onclick="${actionPopup}" src="${safeImg}" loading="lazy" decoding="async" alt="Cover" class="w-full h-full object-cover rounded-lg md:rounded-xl shadow-md group-hover:scale-105 transition-transform duration-500 cursor-pointer">
                         <div class="absolute top-3 right-3 md:top-5 md:right-5 bg-black/60 px-1.5 py-0.5 md:px-2 md:py-1 rounded text-[8px] md:text-[9px] font-bold tracking-widest text-white border border-white/20 z-20">PDF</div>
                     </div>
-                    
                     <div class="p-3 md:p-4 flex flex-col flex-1">
                         <h3 onclick="${actionPopup}" class="text-xs md:text-sm font-bold text-white line-clamp-2 leading-snug mb-1 cursor-pointer hover:text-cyan-400 transition-colors">${product.title}</h3>
                         <p class="text-[9px] md:text-[11px] text-white/50 mb-2 font-medium uppercase tracking-wider">${product.kategori}</p>
@@ -343,13 +257,37 @@
                 fragment.appendChild(card);
             });
 
-            grid.appendChild(fragment);
+            gridElement.appendChild(fragment);
+            updatePurchaseButtons();
+        }
 
-            if(endIndex < appState.filteredProducts.length) {
-                loadMoreBtn.classList.remove('hidden');
-            } else {
-                loadMoreBtn.classList.add('hidden');
+        async function getFingerprintAndPurchases() {
+            try {
+                if (window.FingerprintJS) {
+                    const fp = await window.FingerprintJS.load();
+                    const result = await fp.get();
+                    appState.fingerprint = result.visitorId;
+                } else { throw new Error("FP belum termuat"); }
+            } catch (error) {
+                let fallbackId = localStorage.getItem('sanlucid_fallback_id');
+                if (!fallbackId) {
+                    fallbackId = 'anon-' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('sanlucid_fallback_id', fallbackId);
+                }
+                appState.fingerprint = fallbackId;
             }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/purchases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fingerprint: appState.fingerprint })
+                });
+                if(response.ok) {
+                    const data = await response.json();
+                    appState.purchasedMap = data.purchases || {};
+                }
+            } catch (e) { console.warn("Riwayat gagal."); }
         }
 
         function updatePurchaseButtons() {
@@ -365,34 +303,23 @@
         let searchTimeout;
         function debounceSearch(query) {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                executeSearch(query);
-            }, 300);
+            searchTimeout = setTimeout(() => { executeSearch(query); }, 300);
         }
 
         function executeSearch(query) {
-            const lowerQuery = query.toLowerCase().trim();
+            appState.currentSearch = query.trim();
+            appState.currentPage = 1;
             document.getElementById('desktopSearch').value = query;
             document.getElementById('mobileSearchInput').value = query;
 
-            if (lowerQuery !== "") {
+            if (query !== "") {
                 document.querySelectorAll('.category-btn').forEach((btn, index) => {
                     if(index === 0) { btn.classList.add('text-cyan-400', 'font-bold'); btn.classList.remove('text-white/70'); } 
                     else { btn.classList.remove('text-cyan-400', 'font-bold'); btn.classList.add('text-white/70'); }
                 });
+                appState.currentKategori = "";
             }
-
-            if(lowerQuery === "") {
-                appState.filteredProducts = [...appState.allProducts];
-            } else {
-                appState.filteredProducts = appState.allProducts.filter(p => 
-                    p.title.toLowerCase().includes(lowerQuery) || 
-                    (p.kategori && p.kategori.toLowerCase().includes(lowerQuery)) || 
-                    (p.deskripsi && p.deskripsi.toLowerCase().includes(lowerQuery))
-                );
-            }
-            appState.currentPage = 1;
-            renderProducts(false);
+            fetchProducts(false);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
@@ -403,20 +330,21 @@
             });
             btnElement.classList.remove('text-white/70');
             btnElement.classList.add('text-cyan-400', 'font-bold');
+            
             document.getElementById('desktopSearch').value = '';
             document.getElementById('mobileSearchInput').value = '';
-
-            if (kategori === '') appState.filteredProducts = [...appState.allProducts];
-            else appState.filteredProducts = appState.allProducts.filter(p => p.kategori === kategori);
             
+            appState.currentSearch = "";
+            appState.currentKategori = kategori;
             appState.currentPage = 1;
-            renderProducts(false);
+            
+            fetchProducts(false);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function loadMore() {
             appState.currentPage++;
-            renderProducts(true);
+            fetchProducts(true);
         }
 
         function bukaPopup(gambar, kategori, judul, deskripsi, linkSample) {
@@ -484,7 +412,7 @@
                 const data = await response.json();
                 
                 if(response.ok) {
-                    alert(`✅ ID Pesanan: ${data.order_id}\n\nDi sinilah Anda nantinya mengarahkan pembeli ke halaman pembayaran Pakkasir!`);
+                    alert(`✅ ID Pesanan: ${data.order_id}\n\nMengarahkan pembeli ke pembayaran...`);
                 } else {
                     alert("Gagal membuat pesanan.");
                 }
@@ -498,7 +426,6 @@
             }
         }
 
-        // PANGGIL INITIALIZEAPP SECARA LANGSUNG SAAT HALAMAN DIMUAT
         document.addEventListener("DOMContentLoaded", () => {
             initializeApp();
         });
