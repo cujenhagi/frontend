@@ -12,7 +12,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- PENTING: FingerprintJS & Library Pembuat Gambar QR Code -->
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
@@ -156,7 +155,6 @@
     <!-- POP-UP PEMBAYARAN QRIS -->
     <div id="qrisPopup" class="fixed inset-0 z-[120] hidden items-center justify-center p-4 bg-black/90 backdrop-blur-md">
         <div class="bg-[#f8f9fa] rounded-3xl w-full max-w-sm flex flex-col overflow-hidden items-center p-6 text-slate-800 shadow-[0_0_50px_rgba(6,182,212,0.3)] popup-scale relative border-4 border-cyan-500/20">
-            <!-- Header QRIS -->
             <div class="w-full flex justify-between items-center mb-4">
                 <img src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_QRIS.svg" alt="QRIS" class="h-6">
                 <button onclick="closeQrisPopup()" class="text-slate-400 hover:text-rose-500 transition-colors">
@@ -166,17 +164,20 @@
             
             <h3 class="font-black text-2xl mb-1 text-slate-900" id="qrisTotal">Rp 0</h3>
             <p class="text-[11px] text-slate-500 mb-5 text-center font-medium leading-relaxed">
-                Scan kode QR ini menggunakan aplikasi m-Banking atau Dompet Digital (Gopay, OVO, Dana, dll) Anda.
+                Scan kode QR ini menggunakan aplikasi m-Banking atau Dompet Digital Anda.
             </p>
             
-            <!-- Tempat merender QR Code -->
             <div id="qrisCodeContainer" class="bg-white p-3 rounded-2xl shadow-[0_5px_15px_rgba(0,0,0,0.1)] mb-5 flex justify-center border border-slate-200 w-52 h-52 items-center">
-                <!-- QR Code akan dibuat di sini oleh JS -->
             </div>
             
-            <div class="flex items-center text-xs font-bold text-cyan-600 bg-cyan-100 px-4 py-2 rounded-full animate-pulse shadow-sm">
+            <div class="flex items-center text-xs font-bold text-cyan-600 bg-cyan-100 px-4 py-2 rounded-full animate-pulse shadow-sm w-full justify-center">
                 <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Menunggu Pembayaran...
             </div>
+
+            <!-- TOMBOL SIMULASI (KHUSUS MODE SANDBOX) -->
+            <button id="btnSimulate" onclick="triggerSimulation()" class="mt-4 w-full py-2 bg-orange-100/50 text-orange-600 border border-orange-300 font-bold rounded-xl hover:bg-orange-100 transition-colors text-xs flex justify-center items-center">
+                Simulasikan pembayaran
+            </button>
         </div>
     </div>
 
@@ -193,10 +194,11 @@
             currentKategori: "",
             hasMore: false,
             isLoading: false,
-            pendingProductId: null // Menyimpan ID produk yang sedang dibayar di popup
+            pendingProductId: null,
+            currentOrderId: null // Menyimpan ID pesanan untuk simulasi Sandbox
         };
 
-        let qrisCheckInterval; // Variabel untuk Auto-Cek QRIS
+        let qrisCheckInterval; 
 
         async function initializeApp() {
             try {
@@ -515,7 +517,7 @@
         });
 
         // ==========================================
-        // LOGIKA PEMBAYARAN VIA API QRIS (BARU)
+        // PROSES PEMBAYARAN DAN SIMULASI (SANDBOX)
         // ==========================================
         async function processCheckout(productId) {
             const btn = document.getElementById(`btn-${productId}`);
@@ -534,7 +536,14 @@
                 const data = await response.json();
                 
                 if (response.ok && data.qr_string) {
-                    appState.pendingProductId = productId; // Tandai produk yang sedang dibayar
+                    appState.pendingProductId = productId; 
+                    appState.currentOrderId = data.order_id; // Simpan ID untuk fungsi simulasi
+                    
+                    // Kembalikan tombol simulasi ke state awal (berjaga-jaga jika sebelumnya dipencet)
+                    const btnSimulate = document.getElementById('btnSimulate');
+                    btnSimulate.innerHTML = 'Simulasikan pembayaran';
+                    btnSimulate.disabled = false;
+
                     showQrisPopup(data.qr_string, data.total_payment);
                 } else {
                     alert("Gagal membuat pesanan QRIS. " + (data.message || ""));
@@ -548,49 +557,73 @@
             }
         }
 
-        // Fungsi Menampilkan Pop-Up QRIS & Render Gambar
+        async function triggerSimulation() {
+            if (!appState.currentOrderId) return;
+            
+            const btn = document.getElementById('btnSimulate');
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses Webhook...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/simulate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_id: appState.currentOrderId })
+                });
+
+                if (response.ok) {
+                    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Simulasi sukses, menunggu auto-refresh...';
+                    // Kita tidak perlu berbuat apa-apa lagi di sini, karena timer qrisCheckInterval 
+                    // akan mengecek server dalam hitungan detik dan menutup popup secara otomatis.
+                } else {
+                    alert("Gagal simulasi. Pastikan Proyek Pakasir Anda berada di mode Sandbox.");
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                alert("Gagal menghubungi server saat simulasi.");
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
         function showQrisPopup(qrString, totalPayment) {
-            // 1. Tulis harga total
             document.getElementById('qrisTotal').innerText = 'Rp ' + new Intl.NumberFormat('id-ID').format(totalPayment);
             
-            // 2. Bersihkan wadah QR lama & Buat gambar QR baru
             const qrisContainer = document.getElementById('qrisCodeContainer');
             qrisContainer.innerHTML = ''; 
             new QRCode(qrisContainer, {
                 text: qrString,
-                width: 184, // Ukuran QR
+                width: 184, 
                 height: 184,
-                colorDark : "#0f172a", // Warna barcode
+                colorDark : "#0f172a", 
                 colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.M
             });
 
-            // 3. Tampilkan Pop-Up
             const popup = document.getElementById('qrisPopup');
             popup.classList.remove('hidden'); 
             popup.classList.add('flex');
-            document.body.style.overflow = 'hidden'; // Kunci scroll layar utama
+            document.body.style.overflow = 'hidden';
 
-            // 4. Mulai Auto-Cek Pembayaran setiap 3 Detik ke server
             qrisCheckInterval = setInterval(() => {
                 refreshStatusDiamDiam();
             }, 3000);
         }
 
-        // Fungsi Menutup Pop-Up QRIS
         function closeQrisPopup() {
             const popup = document.getElementById('qrisPopup');
             popup.classList.add('hidden'); 
             popup.classList.remove('flex');
             document.body.style.overflow = 'auto';
             
-            // Hentikan timer auto-cek
             if (qrisCheckInterval) {
                 clearInterval(qrisCheckInterval);
                 qrisCheckInterval = null;
             }
 
-            // Kembalikan tombol "Proses..." jadi "Beli" jika batal bayar
             document.querySelectorAll('button[id^="btn-"]').forEach(btn => {
                 if (btn.innerHTML.includes('Proses...')) {
                     btn.innerHTML = 'Beli Sekarang';
@@ -598,11 +631,9 @@
                 }
             });
             appState.pendingProductId = null;
+            appState.currentOrderId = null;
         }
 
-        // =================================================================
-        // FITUR AUTO-REFRESH (Dipanggil saat timer jalan / ganti tab)
-        // =================================================================
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "visible") refreshStatusDiamDiam();
         });
@@ -623,27 +654,20 @@
                     const data = await response.json();
                     appState.purchasedMap = data.purchases || {};
                     
-                    // Cek apakah produk yang ditunggu QRIS-nya sudah lunas
                     if (appState.pendingProductId && appState.purchasedMap[appState.pendingProductId]) {
-                        closeQrisPopup(); // Tutup QR otomatis
-                        
-                        // Perbarui seluruh interface
+                        closeQrisPopup(); 
                         updatePurchaseButtons();
                         updateDownloadBubble();
 
-                        // Berikan kejutan notif berhasil
                         setTimeout(() => {
                             alert("✅ Pembayaran Berhasil! Berkas e-book Anda siap diunduh.");
                         }, 500);
                     } else {
-                        // Jika tidak ada popup QR, update background normal
                         updatePurchaseButtons();
                         updateDownloadBubble();
                     }
                 }
-            } catch (e) {
-                console.warn("Gagal cek server latar belakang.");
-            }
+            } catch (e) {}
         }
 
         document.addEventListener("DOMContentLoaded", () => {
