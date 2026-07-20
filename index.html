@@ -171,7 +171,7 @@
         let appState = {
             fingerprint: "",
             purchasedMap: {},
-            productCache: {}, // Menyimpan metadata produk yang pernah dimuat
+            productCache: {}, 
             currentPage: 1,
             currentSearch: "",
             currentKategori: "",
@@ -180,7 +180,6 @@
         };
 
         async function initializeApp() {
-            // Muat cache metadata produk agar tidak hilang saat direfresh
             try {
                 const savedCache = localStorage.getItem('sanlucid_product_cache');
                 if(savedCache) appState.productCache = JSON.parse(savedCache);
@@ -256,7 +255,6 @@
             const fragment = document.createDocumentFragment();
 
             productsArray.forEach(product => {
-                // Simpan metadata ke cache untuk digunakan di popup unduhan
                 appState.productCache[product.id] = { title: product.title, cover_url: product.cover_url };
                 
                 const isPurchased = appState.purchasedMap[product.id];
@@ -300,7 +298,6 @@
 
             gridElement.appendChild(fragment);
             
-            // Simpan cache ke local storage
             try { localStorage.setItem('sanlucid_product_cache', JSON.stringify(appState.productCache)); } catch(e) {}
             
             updatePurchaseButtons();
@@ -331,7 +328,7 @@
                 if(response.ok) {
                     const data = await response.json();
                     appState.purchasedMap = data.purchases || {};
-                    updateDownloadBubble(); // Update badge gelembung
+                    updateDownloadBubble(); 
                 }
             } catch (e) { console.warn("Riwayat gagal."); }
         }
@@ -362,7 +359,6 @@
         function toggleLibraryPopup() {
             const popup = document.getElementById('libraryPopup');
             if (popup.classList.contains('hidden')) {
-                // Render daftar buku
                 const list = document.getElementById('libraryList');
                 list.innerHTML = '';
                 const keys = Object.keys(appState.purchasedMap);
@@ -404,7 +400,6 @@
         function debounceSearch(query) {
             clearTimeout(searchTimeout);
             
-            // Atur tombol silang di pencarian desktop
             const clearBtn = document.getElementById('clearSearchBtn');
             if (query.trim() !== "") {
                 clearBtn.classList.remove('hidden');
@@ -528,7 +523,6 @@
 
                 const data = await response.json();
                 
-                // PERBAIKAN: Mengarahkan langsung ke halaman pembayaran Pakasir
                 if(response.ok && data.payment_url) {
                     window.location.href = data.payment_url;
                 } else {
@@ -541,6 +535,53 @@
                 const btn = document.getElementById(`btn-${productId}`);
                 btn.innerHTML = 'Beli Sekarang';
                 btn.disabled = false;
+            }
+        }
+
+        // =================================================================
+        // FITUR AUTO-REFRESH SILUMAN SAAT KEMBALI DARI HALAMAN PEMBAYARAN
+        // =================================================================
+
+        // Deteksi jika pembeli berpindah tab lalu kembali ke tab web Anda
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") refreshStatusDiamDiam();
+        });
+
+        // Deteksi jika pembeli menekan tombol 'Back' dan halaman diload dari cache
+        window.addEventListener("pageshow", (event) => {
+            if (event.persisted) refreshStatusDiamDiam();
+        });
+
+        async function refreshStatusDiamDiam() {
+            if (!appState.fingerprint) return;
+            try {
+                const response = await fetch(`${API_BASE_URL}/purchases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fingerprint: appState.fingerprint })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    appState.purchasedMap = data.purchases || {};
+                    
+                    // 1. Reset semua tombol yang tersangkut tulisan "Proses..." 
+                    // (Berguna jika ternyata pembeli batal bayar dan menekan tombol Back)
+                    document.querySelectorAll('button[id^="btn-"]').forEach(btn => {
+                        if (btn.innerHTML.includes('Proses...')) {
+                            btn.innerHTML = 'Beli Sekarang';
+                            btn.disabled = false;
+                        }
+                    });
+
+                    // 2. Ubah tombol menjadi "Unduh" untuk produk yang sudah berhasil dibayar
+                    updatePurchaseButtons();
+                    
+                    // 3. Perbarui angka di Gelembung Unduhan
+                    updateDownloadBubble();
+                }
+            } catch (e) {
+                console.warn("Gagal melakukan auto-refresh siluman.");
             }
         }
 
