@@ -45,6 +45,13 @@
         
         .popup-scale { animation: popScale 0.3s ease-out forwards; }
         @keyframes popScale { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+        /* Animasi Melayang untuk Gelembung Unduhan */
+        @keyframes floatBubble {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-8px) scale(1.02); }
+        }
+        .animate-float { animation: floatBubble 3s ease-in-out infinite; }
     </style>
 </head>
 <body class="text-slate-200 font-sans antialiased relative min-h-screen bg-[#050b14] pb-20 md:pb-0 overflow-x-hidden">
@@ -63,7 +70,11 @@
                 <div class="flex-1 max-w-xl hidden md:block">
                     <div class="relative group">
                         <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><i class="fa-solid fa-magnifying-glass text-white/50 group-focus-within:text-cyan-400 transition-colors"></i></div>
-                        <input type="text" id="desktopSearch" oninput="debounceSearch(this.value)" class="block w-full pl-11 pr-4 py-2 border border-white/20 rounded-full bg-white/[0.04] text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-cyan-400 focus:border-cyan-400 focus:bg-white/[0.08] sm:text-sm transition-all" placeholder="Cari judul, kategori, atau deskripsi e-book...">
+                        <input type="text" id="desktopSearch" oninput="debounceSearch(this.value)" class="block w-full pl-11 pr-10 py-2 border border-white/20 rounded-full bg-white/[0.04] text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-cyan-400 focus:border-cyan-400 focus:bg-white/[0.08] sm:text-sm transition-all" placeholder="Cari judul, kategori, atau deskripsi e-book...">
+                        <!-- Tombol Silang Pencarian Desktop -->
+                        <button id="clearSearchBtn" onclick="clearDesktopSearch()" class="absolute inset-y-0 right-0 pr-4 flex items-center hidden text-white/40 hover:text-white transition-colors focus:outline-none">
+                            <i class="fa-solid fa-xmark text-lg"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="relative">
@@ -103,6 +114,13 @@
         </div>
     </main>
 
+    <!-- GELEMBUNG UNDUHAN (DOWNLOAD BUBBLE) -->
+    <button id="downloadBubble" onclick="toggleLibraryPopup()" class="fixed z-[80] hidden flex items-center justify-center bg-gradient-to-tr from-cyan-500 to-blue-600 text-white rounded-full shadow-[0_10px_25px_rgba(6,182,212,0.5)] border border-cyan-400/50 hover:brightness-110 transition-all md:bottom-6 md:right-6 bottom-24 right-6 w-14 h-14 animate-float">
+        <i class="fa-solid fa-cloud-arrow-down text-xl"></i>
+        <span id="downloadCount" class="absolute -top-1 -right-1 bg-rose-500 text-white text-[11px] font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-[#050b14] shadow-md">0</span>
+    </button>
+
+    <!-- FAB PENCARIAN MOBILE -->
     <div id="mobileSearchFab" class="search-fab-container md:hidden">
         <div class="fab-icon-box" onclick="toggleMobileSearch()"><i class="fa-solid fa-magnifying-glass text-white text-lg"></i></div>
         <input type="text" id="mobileSearchInput" oninput="debounceSearch(this.value)" class="search-input-mobile" placeholder="Cari judul atau kategori...">
@@ -133,6 +151,19 @@
         </div>
     </div>
 
+    <!-- POP-UP DAFTAR UNDUHAN SAYA -->
+    <div id="libraryPopup" class="fixed inset-0 z-[110] hidden items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onclick="if(event.target.id==='libraryPopup') toggleLibraryPopup()">
+        <div class="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md flex flex-col overflow-hidden shadow-[0_15px_50px_rgba(0,0,0,0.8)] popup-scale relative" style="max-height: 85vh;">
+            <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/[0.02] shrink-0">
+                <h2 class="text-white font-bold text-base md:text-lg"><i class="fa-solid fa-box-open text-cyan-400 mr-2"></i>E-Book Saya</h2>
+                <button onclick="toggleLibraryPopup()" class="text-white/50 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div id="libraryList" class="p-4 overflow-y-auto grow flex flex-col gap-3">
+                <!-- Daftar Produk Terbeli akan dirender di sini -->
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE_URL = "https://backend-8occ.onrender.com/api";
         const ITEMS_PER_PAGE = 24; 
@@ -140,6 +171,7 @@
         let appState = {
             fingerprint: "",
             purchasedMap: {},
+            productCache: {}, // Menyimpan metadata produk yang pernah dimuat
             currentPage: 1,
             currentSearch: "",
             currentKategori: "",
@@ -148,6 +180,12 @@
         };
 
         async function initializeApp() {
+            // Muat cache metadata produk agar tidak hilang saat direfresh
+            try {
+                const savedCache = localStorage.getItem('sanlucid_product_cache');
+                if(savedCache) appState.productCache = JSON.parse(savedCache);
+            } catch(e) { appState.productCache = {}; }
+
             await getFingerprintAndPurchases();
             await fetchCategories();
             await fetchProducts(false);
@@ -218,6 +256,9 @@
             const fragment = document.createDocumentFragment();
 
             productsArray.forEach(product => {
+                // Simpan metadata ke cache untuk digunakan di popup unduhan
+                appState.productCache[product.id] = { title: product.title, cover_url: product.cover_url };
+                
                 const isPurchased = appState.purchasedMap[product.id];
                 const priceFormatted = new Intl.NumberFormat('id-ID').format(product.price);
                 const safeDesc = encodeURIComponent((product.deskripsi || "").replace(/\n/g, '<br>'));
@@ -258,6 +299,10 @@
             });
 
             gridElement.appendChild(fragment);
+            
+            // Simpan cache ke local storage
+            try { localStorage.setItem('sanlucid_product_cache', JSON.stringify(appState.productCache)); } catch(e) {}
+            
             updatePurchaseButtons();
         }
 
@@ -286,6 +331,7 @@
                 if(response.ok) {
                     const data = await response.json();
                     appState.purchasedMap = data.purchases || {};
+                    updateDownloadBubble(); // Update badge gelembung
                 }
             } catch (e) { console.warn("Riwayat gagal."); }
         }
@@ -300,10 +346,80 @@
             });
         }
 
+        function updateDownloadBubble() {
+            const purchasedCount = Object.keys(appState.purchasedMap).length;
+            const bubble = document.getElementById('downloadBubble');
+            const countBadge = document.getElementById('downloadCount');
+            
+            if (purchasedCount > 0) {
+                bubble.classList.remove('hidden');
+                countBadge.innerText = purchasedCount;
+            } else {
+                bubble.classList.add('hidden');
+            }
+        }
+
+        function toggleLibraryPopup() {
+            const popup = document.getElementById('libraryPopup');
+            if (popup.classList.contains('hidden')) {
+                // Render daftar buku
+                const list = document.getElementById('libraryList');
+                list.innerHTML = '';
+                const keys = Object.keys(appState.purchasedMap);
+                
+                if (keys.length === 0) {
+                    list.innerHTML = '<div class="text-center text-white/50 py-10 flex flex-col items-center"><i class="fa-solid fa-box-open text-4xl mb-3"></i><p>Belum ada e-book yang dibeli.</p></div>';
+                } else {
+                    keys.forEach(id => {
+                        const prod = appState.productCache[id];
+                        const title = prod && prod.title ? prod.title : `E-Book (ID: ${id.substring(0,8)}...)`;
+                        let img = "https://placehold.co/100x150/1e293b/94a3b8?text=Berkas";
+                        if (prod && prod.cover_url && prod.cover_url.trim() !== "") {
+                            img = `https://wsrv.nl/?url=${prod.cover_url.replace("i.ibb.co", "i.ibb.co.com")}&w=100&output=webp`;
+                        }
+                        const downloadUrl = `${API_BASE_URL}/download/${id}?fingerprint=${appState.fingerprint}`;
+                        
+                        list.innerHTML += `
+                            <div class="flex items-center gap-3 bg-white/[0.03] p-3 rounded-xl border border-white/5 hover:bg-white/[0.06] transition-colors">
+                                <img src="${img}" loading="lazy" class="w-12 h-16 object-cover rounded shadow border border-white/10">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="text-white text-xs md:text-sm font-bold truncate mb-1">${title}</h4>
+                                    <a href="${downloadUrl}" target="_blank" class="inline-block text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-3 py-1.5 rounded-full hover:bg-cyan-500 hover:text-white transition-colors">
+                                        <i class="fa-solid fa-download mr-1"></i> Unduh Berkas
+                                    </a>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                popup.classList.remove('hidden'); popup.classList.add('flex');
+                document.body.style.overflow = 'hidden';
+            } else {
+                popup.classList.add('hidden'); popup.classList.remove('flex');
+                document.body.style.overflow = 'auto';
+            }
+        }
+
         let searchTimeout;
         function debounceSearch(query) {
             clearTimeout(searchTimeout);
+            
+            // Atur tombol silang di pencarian desktop
+            const clearBtn = document.getElementById('clearSearchBtn');
+            if (query.trim() !== "") {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+            }
+
             searchTimeout = setTimeout(() => { executeSearch(query); }, 300);
+        }
+
+        function clearDesktopSearch() {
+            const desktopInput = document.getElementById('desktopSearch');
+            desktopInput.value = '';
+            document.getElementById('clearSearchBtn').classList.add('hidden');
+            executeSearch('');
         }
 
         function executeSearch(query) {
@@ -333,6 +449,7 @@
             
             document.getElementById('desktopSearch').value = '';
             document.getElementById('mobileSearchInput').value = '';
+            document.getElementById('clearSearchBtn').classList.add('hidden');
             
             appState.currentSearch = "";
             appState.currentKategori = kategori;
@@ -411,6 +528,7 @@
 
                 const data = await response.json();
                 
+                // PERBAIKAN: Mengarahkan langsung ke halaman pembayaran Pakasir
                 if(response.ok && data.payment_url) {
                     window.location.href = data.payment_url;
                 } else {
