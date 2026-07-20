@@ -180,6 +180,22 @@
         </div>
     </div>
 
+    <!-- POP-UP SUKSES PEMBAYARAN -->
+    <div id="successPopup" class="fixed inset-0 z-[130] hidden items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onclick="closeSuccessPopupOverlay(event)">
+        <div class="bg-[#0f172a] border border-emerald-500/30 rounded-2xl w-full max-w-sm flex flex-col items-center p-6 text-center shadow-[0_0_40px_rgba(16,185,129,0.2)] popup-scale relative">
+            <div class="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                <i class="fa-solid fa-check text-3xl text-emerald-400"></i>
+            </div>
+            <h3 class="text-white font-bold text-xl mb-2">Pembayaran Berhasil!</h3>
+            <p class="text-white/70 text-sm mb-6 leading-relaxed">
+                Terima kasih! Berkas e-book Anda sudah tersedia dan siap untuk diunduh sekarang.
+            </p>
+            <button onclick="closeSuccessPopup()" class="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                Tutup
+            </button>
+        </div>
+    </div>
+
     <script>
         const API_BASE_URL = "https://backend-8occ.onrender.com/api";
         const ITEMS_PER_PAGE = 24; 
@@ -320,17 +336,12 @@
             updatePurchaseButtons();
         }
 
-        // ==========================================
-        // PERBAIKAN LOGIKA FINGERPRINT (ANTI-SPOOF)
-        // ==========================================
         async function getFingerprintAndPurchases() {
-            // 1. Selalu utamakan mengambil ID yang sudah tersimpan di browser
             let savedId = localStorage.getItem('sanlucid_device_id');
             
             if (savedId) {
                 appState.fingerprint = savedId;
             } else {
-                // 2. Jika belum ada, baru mencoba menggunakan FingerprintJS
                 try {
                     if (window.FingerprintJS) {
                         const fp = await window.FingerprintJS.load();
@@ -340,11 +351,9 @@
                         throw new Error("FP belum termuat"); 
                     }
                 } catch (error) {
-                    // 3. Jika gagal/diblokir sama sekali, buat ID acak yang unik
                     savedId = 'anon-' + Math.random().toString(36).substr(2, 12);
                 }
                 
-                // 4. Kunci ID ini di Local Storage agar tidak terpengaruh spoofing Brave saat di-refresh
                 localStorage.setItem('sanlucid_device_id', savedId);
                 appState.fingerprint = savedId;
             }
@@ -528,6 +537,9 @@
             }
         });
 
+        // ==========================================
+        // PROSES PEMBAYARAN DAN SIMULASI (SANDBOX)
+        // ==========================================
         async function processCheckout(productId) {
             const btn = document.getElementById(`btn-${productId}`);
             const originalText = btn.innerHTML;
@@ -646,6 +658,25 @@
             appState.currentOrderId = null;
         }
 
+        // FUNGSI POP-UP SUKSES PEMBAYARAN KUSTOM
+        function showSuccessPopup() {
+            const popup = document.getElementById('successPopup');
+            popup.classList.remove('hidden');
+            popup.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSuccessPopup() {
+            const popup = document.getElementById('successPopup');
+            popup.classList.add('hidden');
+            popup.classList.remove('flex');
+            document.body.style.overflow = 'auto';
+        }
+
+        function closeSuccessPopupOverlay(event) {
+            if (event.target.id === 'successPopup') closeSuccessPopup();
+        }
+
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "visible") refreshStatusDiamDiam();
         });
@@ -671,8 +702,9 @@
                         updatePurchaseButtons();
                         updateDownloadBubble();
 
+                        // Memanggil Pop-Up Kustom
                         setTimeout(() => {
-                            alert("✅ Pembayaran Berhasil! Berkas e-book Anda siap diunduh.");
+                            showSuccessPopup();
                         }, 500);
                     } else {
                         updatePurchaseButtons();
