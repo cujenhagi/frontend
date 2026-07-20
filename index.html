@@ -336,8 +336,16 @@
             updatePurchaseButtons();
         }
 
+        // --- SOLUSI BUG BROWSER PENGHALANG PELACAKAN ---
         async function getFingerprintAndPurchases() {
-            let savedId = localStorage.getItem('sanlucid_device_id');
+            let savedId = null;
+            
+            // Mencegah Crash saat Brave/ekstensi privasi memblokir localStorage
+            try {
+                savedId = localStorage.getItem('sanlucid_device_id');
+            } catch(e) {
+                console.warn("Storage diblokir oleh peramban.");
+            }
             
             if (savedId) {
                 appState.fingerprint = savedId;
@@ -354,7 +362,12 @@
                     savedId = 'anon-' + Math.random().toString(36).substr(2, 12);
                 }
                 
-                localStorage.setItem('sanlucid_device_id', savedId);
+                try {
+                    localStorage.setItem('sanlucid_device_id', savedId);
+                } catch (e) {
+                    console.warn("Gagal menyimpan identitas ke storage lokal karena diblokir.");
+                }
+                
                 appState.fingerprint = savedId;
             }
 
@@ -658,7 +671,6 @@
             appState.currentOrderId = null;
         }
 
-        // FUNGSI POP-UP SUKSES PEMBAYARAN KUSTOM
         function showSuccessPopup() {
             const popup = document.getElementById('successPopup');
             popup.classList.remove('hidden');
@@ -702,7 +714,6 @@
                         updatePurchaseButtons();
                         updateDownloadBubble();
 
-                        // Memanggil Pop-Up Kustom
                         setTimeout(() => {
                             showSuccessPopup();
                         }, 500);
