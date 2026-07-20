@@ -174,7 +174,6 @@
                 <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Menunggu Pembayaran...
             </div>
 
-            <!-- TOMBOL SIMULASI (KHUSUS MODE SANDBOX) -->
             <button id="btnSimulate" onclick="triggerSimulation()" class="mt-4 w-full py-2 bg-orange-100/50 text-orange-600 border border-orange-300 font-bold rounded-xl hover:bg-orange-100 transition-colors text-xs flex justify-center items-center">
                 Simulasikan pembayaran
             </button>
@@ -321,20 +320,33 @@
             updatePurchaseButtons();
         }
 
+        // ==========================================
+        // PERBAIKAN LOGIKA FINGERPRINT (ANTI-SPOOF)
+        // ==========================================
         async function getFingerprintAndPurchases() {
-            try {
-                if (window.FingerprintJS) {
-                    const fp = await window.FingerprintJS.load();
-                    const result = await fp.get();
-                    appState.fingerprint = result.visitorId;
-                } else { throw new Error("FP belum termuat"); }
-            } catch (error) {
-                let fallbackId = localStorage.getItem('sanlucid_fallback_id');
-                if (!fallbackId) {
-                    fallbackId = 'anon-' + Math.random().toString(36).substr(2, 9);
-                    localStorage.setItem('sanlucid_fallback_id', fallbackId);
+            // 1. Selalu utamakan mengambil ID yang sudah tersimpan di browser
+            let savedId = localStorage.getItem('sanlucid_device_id');
+            
+            if (savedId) {
+                appState.fingerprint = savedId;
+            } else {
+                // 2. Jika belum ada, baru mencoba menggunakan FingerprintJS
+                try {
+                    if (window.FingerprintJS) {
+                        const fp = await window.FingerprintJS.load();
+                        const result = await fp.get();
+                        savedId = result.visitorId;
+                    } else { 
+                        throw new Error("FP belum termuat"); 
+                    }
+                } catch (error) {
+                    // 3. Jika gagal/diblokir sama sekali, buat ID acak yang unik
+                    savedId = 'anon-' + Math.random().toString(36).substr(2, 12);
                 }
-                appState.fingerprint = fallbackId;
+                
+                // 4. Kunci ID ini di Local Storage agar tidak terpengaruh spoofing Brave saat di-refresh
+                localStorage.setItem('sanlucid_device_id', savedId);
+                appState.fingerprint = savedId;
             }
 
             try {
@@ -516,9 +528,6 @@
             }
         });
 
-        // ==========================================
-        // PROSES PEMBAYARAN DAN SIMULASI (SANDBOX)
-        // ==========================================
         async function processCheckout(productId) {
             const btn = document.getElementById(`btn-${productId}`);
             const originalText = btn.innerHTML;
@@ -527,9 +536,8 @@
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Proses...';
                 btn.disabled = true;
 
-                // SISTEM TIMEOUT 15 DETIK AGAR TIDAK MUTER SELAMANYA SAAT DIBLOKIR
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
 
                 const response = await fetch(`${API_BASE_URL}/checkout`, {
                     method: 'POST',
@@ -538,7 +546,7 @@
                     signal: controller.signal
                 });
 
-                clearTimeout(timeoutId); // Matikan timer jika fetch berhasil membalas
+                clearTimeout(timeoutId); 
 
                 const data = await response.json();
                 
@@ -554,16 +562,10 @@
 
                     showQrisPopup(data.qr_string, data.total_payment);
                 } else {
-                    alert("Gagal membuat pesanan QRIS. " + (data.message || ""));
                     btn.innerHTML = originalText;
                     btn.disabled = false;
                 }
             } catch (error) {
-                if (error.name === 'AbortError') {
-                    alert("Koneksi ditahan oleh Browser! Jika Anda menggunakan Brave/Adblock, mohon matikan fitur Shields untuk situs ini.");
-                } else {
-                    alert("Gagal menghubungi server pusat karena kendala jaringan atau diblokir peramban privasi.");
-                }
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
