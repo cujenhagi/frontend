@@ -217,13 +217,26 @@
 
         async function initializeApp() {
             try {
-                const savedCache = localStorage.getItem('sanlucid_product_cache');
-                if(savedCache) appState.productCache = JSON.parse(savedCache);
+                if (window.localStorage) {
+                    const savedCache = window.localStorage.getItem('sanlucid_product_cache');
+                    if(savedCache) appState.productCache = JSON.parse(savedCache);
+                }
             } catch(e) { appState.productCache = {}; }
 
             await getFingerprintAndPurchases();
             await fetchCategories();
             await fetchProducts(false);
+        }
+
+        // FUNGSI PENGAMAN LOCALSTORAGE
+        function saveCacheSafe() {
+            try {
+                if (window.localStorage) {
+                    window.localStorage.setItem('sanlucid_product_cache', JSON.stringify(appState.productCache));
+                }
+            } catch(e) {
+                // Biarkan hening jika diblokir oleh browser
+            }
         }
 
         async function fetchCategories() {
@@ -290,7 +303,7 @@
             const fragment = document.createDocumentFragment();
 
             productsArray.forEach(product => {
-                // PERBAIKAN: Menyimpan seluruh objek produk ke dalam cache (sangat penting untuk keamanan Pop-Up)
+                // Simpan secara utuh agar kebal simbol aneh
                 appState.productCache[product.id] = product;
                 
                 const isPurchased = appState.purchasedMap[product.id];
@@ -303,12 +316,13 @@
                 
                 const masterDownloadUrl = `${API_BASE_URL}/download/${product.id}?fingerprint=${appState.fingerprint}`;
                 
-                // PERBAIKAN: Tombol Pop-up kini HANYA mengirimkan ID Produk. (Bug-Proof 100%)
+                // Murni ID produk, bebas dari string aneh
                 const actionPopup = `bukaPopup('${product.id}')`;
 
+                // Tombol beli menggunakan referensi elemen 'this' secara langsung (ANTI-LAG)
                 const buttonHtml = isPurchased 
                     ? `<a href="${masterDownloadUrl}" target="_blank" class="block w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-center text-[10px] md:text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"><i class="fa-solid fa-cloud-arrow-down mr-1"></i> Unduh File</a>`
-                    : `<button id="btn-${product.id}" onclick="processCheckout('${product.id}')" class="w-full py-2 bg-white/10 border border-white/20 text-white/90 hover:bg-white/20 text-[10px] md:text-xs font-semibold rounded-xl transition-colors">Beli Sekarang</button>`;
+                    : `<button id="btn-${product.id}" onclick="processCheckout('${product.id}', this)" class="w-full py-2 bg-white/10 border border-white/20 text-white/90 hover:bg-white/20 text-[10px] md:text-xs font-semibold rounded-xl transition-colors">Beli Sekarang</button>`;
 
                 const card = document.createElement('div');
                 card.className = "glass-card flex flex-col rounded-2xl overflow-hidden";
@@ -322,8 +336,8 @@
                         <div class="absolute top-3 right-3 md:top-5 md:right-5 bg-black/60 px-1.5 py-0.5 md:px-2 md:py-1 rounded text-[8px] md:text-[9px] font-bold tracking-widest text-white border border-white/20 z-20">PDF</div>
                     </div>
                     <div class="p-3 md:p-4 flex flex-col flex-1">
-                        <h3 onclick="${actionPopup}" class="text-xs md:text-sm font-bold text-white line-clamp-2 leading-snug mb-1 cursor-pointer hover:text-cyan-400 transition-colors">${product.title}</h3>
-                        <p class="text-[9px] md:text-[11px] text-white/50 mb-2 font-medium uppercase tracking-wider">${product.kategori}</p>
+                        <h3 onclick="${actionPopup}" class="text-xs md:text-sm font-bold text-white line-clamp-2 leading-snug mb-1 cursor-pointer hover:text-cyan-400 transition-colors">${product.title || 'Tanpa Judul'}</h3>
+                        <p class="text-[9px] md:text-[11px] text-white/50 mb-2 font-medium uppercase tracking-wider">${product.kategori || 'UMUM'}</p>
                         <div class="mt-auto mb-3"><span class="text-cyan-400 font-black text-xs md:text-sm">Rp ${priceFormatted}</span></div>
                         <div class="mt-auto" id="container-btn-${product.id}">${buttonHtml}</div>
                     </div>
@@ -332,17 +346,16 @@
             });
 
             gridElement.appendChild(fragment);
-            try { localStorage.setItem('sanlucid_product_cache', JSON.stringify(appState.productCache)); } catch(e) {}
+            saveCacheSafe();
             updatePurchaseButtons();
         }
 
-        // --- SOLUSI BUG BROWSER PENGHALANG PELACAKAN ---
+        // --- SISTEM PELACAKAN ANTI-BADAI ---
         async function getFingerprintAndPurchases() {
             let savedId = null;
             
-            // Mencegah Crash saat Brave/ekstensi privasi memblokir localStorage
             try {
-                savedId = localStorage.getItem('sanlucid_device_id');
+                if (window.localStorage) savedId = window.localStorage.getItem('sanlucid_device_id');
             } catch(e) {
                 console.warn("Storage diblokir oleh peramban.");
             }
@@ -356,16 +369,17 @@
                         const result = await fp.get();
                         savedId = result.visitorId;
                     } else { 
-                        throw new Error("FP belum termuat"); 
+                        throw new Error("Pustaka Pelacakan Gagal Dimuat"); 
                     }
                 } catch (error) {
-                    savedId = 'anon-' + Math.random().toString(36).substr(2, 12);
+                    // ID cadangan yang mustahil gagal
+                    savedId = 'anon-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
                 }
                 
                 try {
-                    localStorage.setItem('sanlucid_device_id', savedId);
+                    if (window.localStorage) window.localStorage.setItem('sanlucid_device_id', savedId);
                 } catch (e) {
-                    console.warn("Gagal menyimpan identitas ke storage lokal karena diblokir.");
+                    console.warn("Menjalankan sesi tanpa penyimpanan.");
                 }
                 
                 appState.fingerprint = savedId;
@@ -501,7 +515,7 @@
 
         function loadMore() { appState.currentPage++; fetchProducts(true); }
 
-        // PERBAIKAN: Fungsi Pop-Up sekarang menarik data aman dari Cache Internal, BUKAN dari string HTML
+        // Murni menarik dari Cache Memori
         function bukaPopup(productId) {
             const product = appState.productCache[productId];
             if (!product) return;
@@ -567,13 +581,21 @@
         // ==========================================
         // PROSES PEMBAYARAN DAN SIMULASI (SANDBOX)
         // ==========================================
-        async function processCheckout(productId) {
-            const btn = document.getElementById(`btn-${productId}`);
+        async function processCheckout(productId, btnElement) {
+            // Deteksi tombol fisik secara langsung
+            const btn = btnElement || document.getElementById(`btn-${productId}`);
+            if (!btn) return;
+
             const originalText = btn.innerHTML;
             
             try {
+                // Eksekusi visual segera
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Proses...';
                 btn.disabled = true;
+
+                // Memaksa browser merender UI sebelum menjalankan fetch (Anti DOM Lag)
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => setTimeout(resolve, 50));
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -603,10 +625,12 @@
                 } else {
                     btn.innerHTML = originalText;
                     btn.disabled = false;
+                    alert("Gagal menghubungi kasir.");
                 }
             } catch (error) {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
+                alert("Koneksi internet terputus.");
             }
         }
 
@@ -675,8 +699,9 @@
                 qrisCheckInterval = null;
             }
 
+            // Kembalikan semua tombol Proses menjadi semula
             document.querySelectorAll('button[id^="btn-"]').forEach(btn => {
-                if (btn.innerHTML.includes('Proses...')) {
+                if (btn.innerHTML.includes('Proses') || btn.disabled) {
                     btn.innerHTML = 'Beli Sekarang';
                     btn.disabled = false;
                 }
