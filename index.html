@@ -228,7 +228,6 @@
             await fetchProducts(false);
         }
 
-        // FUNGSI PENGAMAN LOCALSTORAGE
         function saveCacheSafe() {
             try {
                 if (window.localStorage) {
@@ -303,7 +302,6 @@
             const fragment = document.createDocumentFragment();
 
             productsArray.forEach(product => {
-                // Simpan secara utuh agar kebal simbol aneh
                 appState.productCache[product.id] = product;
                 
                 const isPurchased = appState.purchasedMap[product.id];
@@ -315,11 +313,8 @@
                 }
                 
                 const masterDownloadUrl = `${API_BASE_URL}/download/${product.id}?fingerprint=${appState.fingerprint}`;
-                
-                // Murni ID produk, bebas dari string aneh
                 const actionPopup = `bukaPopup('${product.id}')`;
 
-                // Tombol beli menggunakan referensi elemen 'this' secara langsung (ANTI-LAG)
                 const buttonHtml = isPurchased 
                     ? `<a href="${masterDownloadUrl}" target="_blank" class="block w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-center text-[10px] md:text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"><i class="fa-solid fa-cloud-arrow-down mr-1"></i> Unduh File</a>`
                     : `<button id="btn-${product.id}" onclick="processCheckout('${product.id}', this)" class="w-full py-2 bg-white/10 border border-white/20 text-white/90 hover:bg-white/20 text-[10px] md:text-xs font-semibold rounded-xl transition-colors">Beli Sekarang</button>`;
@@ -350,15 +345,12 @@
             updatePurchaseButtons();
         }
 
-        // --- SISTEM PELACAKAN ANTI-BADAI ---
         async function getFingerprintAndPurchases() {
             let savedId = null;
             
             try {
                 if (window.localStorage) savedId = window.localStorage.getItem('sanlucid_device_id');
-            } catch(e) {
-                console.warn("Storage diblokir oleh peramban.");
-            }
+            } catch(e) {}
             
             if (savedId) {
                 appState.fingerprint = savedId;
@@ -372,15 +364,12 @@
                         throw new Error("Pustaka Pelacakan Gagal Dimuat"); 
                     }
                 } catch (error) {
-                    // ID cadangan yang mustahil gagal
                     savedId = 'anon-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
                 }
                 
                 try {
                     if (window.localStorage) window.localStorage.setItem('sanlucid_device_id', savedId);
-                } catch (e) {
-                    console.warn("Menjalankan sesi tanpa penyimpanan.");
-                }
+                } catch (e) {}
                 
                 appState.fingerprint = savedId;
             }
@@ -515,7 +504,6 @@
 
         function loadMore() { appState.currentPage++; fetchProducts(true); }
 
-        // Murni menarik dari Cache Memori
         function bukaPopup(productId) {
             const product = appState.productCache[productId];
             if (!product) return;
@@ -579,21 +567,18 @@
         });
 
         // ==========================================
-        // PROSES PEMBAYARAN DAN SIMULASI (SANDBOX)
+        // PROSES PEMBAYARAN TANPA POP-UP ALERT
         // ==========================================
         async function processCheckout(productId, btnElement) {
-            // Deteksi tombol fisik secara langsung
             const btn = btnElement || document.getElementById(`btn-${productId}`);
             if (!btn) return;
 
             const originalText = btn.innerHTML;
             
             try {
-                // Eksekusi visual segera
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Proses...';
                 btn.disabled = true;
 
-                // Memaksa browser merender UI sebelum menjalankan fetch (Anti DOM Lag)
                 await new Promise(resolve => requestAnimationFrame(resolve));
                 await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -623,14 +608,14 @@
 
                     showQrisPopup(data.qr_string, data.total_payment);
                 } else {
+                    // Terjadi masalah di server, kembalikan tombol secara diam-diam
                     btn.innerHTML = originalText;
                     btn.disabled = false;
-                    alert("Gagal menghubungi kasir.");
                 }
             } catch (error) {
+                // Koneksi terputus atau gagal, kembalikan tombol secara diam-diam
                 btn.innerHTML = originalText;
                 btn.disabled = false;
-                alert("Koneksi internet terputus.");
             }
         }
 
@@ -653,12 +638,12 @@
                 if (response.ok) {
                     btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Simulasi sukses, menunggu auto-refresh...';
                 } else {
-                    alert("Gagal simulasi. Pastikan Proyek Pakasir Anda berada di mode Sandbox.");
+                    // Gagal, kembalikan tombol tanpa alert
                     btn.innerHTML = originalText;
                     btn.disabled = false;
                 }
             } catch (error) {
-                alert("Gagal menghubungi server saat simulasi.");
+                // Gagal, kembalikan tombol tanpa alert
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
@@ -699,7 +684,6 @@
                 qrisCheckInterval = null;
             }
 
-            // Kembalikan semua tombol Proses menjadi semula
             document.querySelectorAll('button[id^="btn-"]').forEach(btn => {
                 if (btn.innerHTML.includes('Proses') || btn.disabled) {
                     btn.innerHTML = 'Beli Sekarang';
