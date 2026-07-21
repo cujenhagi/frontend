@@ -290,21 +290,21 @@
             const fragment = document.createDocumentFragment();
 
             productsArray.forEach(product => {
-                appState.productCache[product.id] = { title: product.title, cover_url: product.cover_url };
+                // PERBAIKAN: Menyimpan seluruh objek produk ke dalam cache (sangat penting untuk keamanan Pop-Up)
+                appState.productCache[product.id] = product;
                 
                 const isPurchased = appState.purchasedMap[product.id];
                 const priceFormatted = new Intl.NumberFormat('id-ID').format(product.price);
-                const safeDesc = encodeURIComponent((product.deskripsi || "").replace(/\n/g, '<br>'));
                 
                 let safeImg = "https://placehold.co/300x450/1e293b/94a3b8?text=No+Cover";
                 if (product.cover_url && product.cover_url.trim() !== "") {
                     safeImg = `https://wsrv.nl/?url=${product.cover_url.replace("i.ibb.co", "i.ibb.co.com")}&w=300&output=webp`;
                 }
                 
-                const sampleLink = `${API_BASE_URL}/sample/${product.id}`;
                 const masterDownloadUrl = `${API_BASE_URL}/download/${product.id}?fingerprint=${appState.fingerprint}`;
-                const safeTitle = (product.title || "Tanpa Judul").replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                const actionPopup = `bukaPopup('${safeImg}', '${product.kategori}', '${safeTitle}', decodeURIComponent('${safeDesc}'), '${sampleLink}')`;
+                
+                // PERBAIKAN: Tombol Pop-up kini HANYA mengirimkan ID Produk. (Bug-Proof 100%)
+                const actionPopup = `bukaPopup('${product.id}')`;
 
                 const buttonHtml = isPurchased 
                     ? `<a href="${masterDownloadUrl}" target="_blank" class="block w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-center text-[10px] md:text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"><i class="fa-solid fa-cloud-arrow-down mr-1"></i> Unduh File</a>`
@@ -501,14 +501,28 @@
 
         function loadMore() { appState.currentPage++; fetchProducts(true); }
 
-        function bukaPopup(gambar, kategori, judul, deskripsi, linkSample) {
-            document.getElementById('popImg').src = gambar;
-            document.getElementById('popKategori').innerText = kategori;
-            document.getElementById('popJudul').innerText = judul;
+        // PERBAIKAN: Fungsi Pop-Up sekarang menarik data aman dari Cache Internal, BUKAN dari string HTML
+        function bukaPopup(productId) {
+            const product = appState.productCache[productId];
+            if (!product) return;
+
+            let safeImg = "https://placehold.co/300x450/1e293b/94a3b8?text=No+Cover";
+            if (product.cover_url && product.cover_url.trim() !== "") {
+                safeImg = `https://wsrv.nl/?url=${product.cover_url.replace("i.ibb.co", "i.ibb.co.com")}&w=300&output=webp`;
+            }
+
+            const linkSample = `${API_BASE_URL}/sample/${product.id}`;
+            const deskripsi = (product.deskripsi || "Tidak ada deskripsi.").replace(/\n/g, '<br>');
+
+            document.getElementById('popImg').src = safeImg;
+            document.getElementById('popKategori').innerText = product.kategori || 'UMUM';
+            document.getElementById('popJudul').innerText = product.title || 'Tanpa Judul';
             document.getElementById('popDeskripsi').innerHTML = deskripsi;
             document.getElementById('popSampleBtn').href = linkSample;
+
             const popup = document.getElementById('popupDetail');
-            popup.classList.remove('hidden'); popup.classList.add('flex');
+            popup.classList.remove('hidden'); 
+            popup.classList.add('flex');
             document.body.style.overflow = 'hidden';
         }
 
